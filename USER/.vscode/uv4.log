@@ -1,0 +1,19 @@
+*** Using Compiler 'V5.06 update 7 (build 960)', folder: 'E:\keil_5\ARM\ARMCC\Bin'
+Build target 'DHT11'
+compiling main.c...
+main.c(120): warning:  #111-D: statement is unreachable
+  	return 0;
+main.c(220): warning:  #167-D: argument of type "char *" is incompatible with parameter of type "u8 *"
+      LCD_ShowString(30,280,200,16,16, ip_buf);
+main.c(143): warning:  #177-D: variable "link_status"  was declared but never referenced
+  	bool  link_status;//º¯Êý×´Ì¬
+main.c(144): warning:  #177-D: variable "con_status"  was declared but never referenced
+  	bool  con_status;//Á¬½Ó×´Ì¬
+main.c(363): warning:  #177-D: variable "key"  was declared but never referenced
+  	u8 key;
+main.c: 5 warnings, 0 errors
+linking...
+Program Size: Code=41118 RO-data=19230 RW-data=204 ZI-data=2098452  
+FromELF: creating hex file...
+"..\OBJ\loT_gataway.axf" - 0 Error(s), 5 Warning(s).
+Build Time Elapsed:  00:00:24

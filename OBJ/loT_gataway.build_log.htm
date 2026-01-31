@@ -1,0 +1,63 @@
+<html>
+<body>
+<pre>
+<h1>µVision Build Log</h1>
+<h2>Tool Versions:</h2>
+IDE-Version: ¦ÌVision V5.39.0.0
+Copyright (C) 2023 ARM Ltd and ARM Germany GmbH. All rights reserved.
+License Information: 1 3070146989@qq.com, 1, LIC=65ISZ-JT5C0-12MLE-5N4NX-BAKNK-E3DBT
+ 
+Tool Versions:
+Toolchain:       MDK-ARM Plus  Version: 5.39.0.0
+Toolchain Path:  E:\solftwares\keil_v5\ARM\ARMCC\Bin
+C Compiler:      Armcc.exe V5.06 update 7 (build 960)
+Assembler:       Armasm.exe V5.06 update 7 (build 960)
+Linker/Locator:  ArmLink.exe V5.06 update 7 (build 960)
+Library Manager: ArmAr.exe V5.06 update 7 (build 960)
+Hex Converter:   FromElf.exe V5.06 update 7 (build 960)
+CPU DLL:         SARMCM3.DLL V5.39.0.0
+Dialog DLL:      DCM.DLL V1.17.5.0
+Target DLL:      STLink\ST-LINKIII-KEIL_SWO.dll V3.2.0.0
+Dialog DLL:      TCM.DLL V1.56.4.0
+ 
+<h2>Project:</h2>
+E:\MCU_code\F429IGT6\loT_gateway\USER\DHT11.uvprojx
+Project File Date:  01/29/2026
+
+<h2>Output:</h2>
+*** Using Compiler 'V5.06 update 7 (build 960)', folder: 'E:\solftwares\keil_v5\ARM\ARMCC\Bin'
+Build target 'DHT11'
+compiling main.c...
+main.c(152): warning:  #111-D: statement is unreachable
+  	return 0;
+main.c(266): warning:  #167-D: argument of type "char *" is incompatible with parameter of type "u8 *"
+      LCD_ShowString(30,330,200,16,16, ip_buf);
+main.c(185): warning:  #177-D: variable "link_status"  was declared but never referenced
+  	bool  link_status;//??????
+main.c(186): warning:  #177-D: variable "con_status"  was declared but never referenced
+  	bool  con_status;//??????
+main.c(364): warning:  #177-D: variable "link_status"  was declared but never referenced
+      bool link_status;
+main.c(53): warning:  #177-D: function "demo_upload_data"  was declared but never referenced
+  static void demo_upload_data(uint8_t is_atkcld)
+main.c: 6 warnings, 0 errors
+linking...
+Program Size: Code=40816 RO-data=18716 RW-data=212 ZI-data=2098676  
+FromELF: creating hex file...
+"..\OBJ\loT_gataway.axf" - 0 Error(s), 6 Warning(s).
+
+<h2>Software Packages used:</h2>
+
+Package Vendor: Keil
+                https://www.keil.com/pack/Keil.STM32F4xx_DFP.2.17.1.pack
+                Keil::STM32F4xx_DFP@2.17.1
+                STMicroelectronics STM32F4 Series Device Support, Drivers and Examples
+
+<h2>Collection of Component include folders:</h2>
+  E:/solftwares/keil_v5/ARM/PACK/Keil/STM32F4xx_DFP/2.17.1/Drivers/CMSIS/Device/ST/STM32F4xx/Include
+
+<h2>Collection of Component Files used:</h2>
+Build Time Elapsed:  00:00:01
+</pre>
+</body>
+</html>

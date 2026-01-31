@@ -1,0 +1,10 @@
+..\obj\cjson.o: ..\cJSON\Src\cJSON.c
+..\obj\cjson.o: E:\solftwares\keil_v5\ARM\ARMCC\Bin\..\include\string.h
+..\obj\cjson.o: E:\solftwares\keil_v5\ARM\ARMCC\Bin\..\include\stdio.h
+..\obj\cjson.o: E:\solftwares\keil_v5\ARM\ARMCC\Bin\..\include\math.h
+..\obj\cjson.o: E:\solftwares\keil_v5\ARM\ARMCC\Bin\..\include\stdlib.h
+..\obj\cjson.o: E:\solftwares\keil_v5\ARM\ARMCC\Bin\..\include\limits.h
+..\obj\cjson.o: E:\solftwares\keil_v5\ARM\ARMCC\Bin\..\include\ctype.h
+..\obj\cjson.o: E:\solftwares\keil_v5\ARM\ARMCC\Bin\..\include\float.h
+..\obj\cjson.o: ..\cJSON\Inc\cJSON.h
+..\obj\cjson.o: E:\solftwares\keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
