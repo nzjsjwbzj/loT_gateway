@@ -1,0 +1,5 @@
+基于STM32F429IGT6，FreeRTOS，ESP8266，MQTT协议的简单物联网平台
+
+1.FreeRTOS通过消息队列将采集到的数据通知给其他任务
+
+2.在Liunx下通过mosquitto搭建本地局域网MQTT服务器，F4采集到的数据通过ESP8266发送到该平台，实现数据接收
