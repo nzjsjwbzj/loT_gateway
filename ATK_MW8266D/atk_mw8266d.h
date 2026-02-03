@@ -36,19 +36,19 @@
                                             }while(0)
 
 /* ??????? */
-#define ATK_MW8266D_EOK         0   /* ??§Õ??? */
+#define ATK_MW8266D_EOK         0   /* ??????? */
 #define ATK_MW8266D_ERROR       1   /* ?????? */
 #define ATK_MW8266D_ETIMEOUT    2   /* ??????? */
 #define ATK_MW8266D_EINVAL      3   /* ???????? */
 
 /* ???????? */
-void atk_mw8266d_hw_reset(void);                                            /* ATK-MW8266D?????¦Ë */
+void atk_mw8266d_hw_reset(void);                                            /* ATK-MW8266D??????? */
 uint8_t atk_mw8266d_send_at_cmd(char *cmd, char *ack, uint32_t timeout);    /* ATK-MW8266D????AT??? */
 uint8_t atk_mw8266d_init(uint32_t baudrate);                                /* ATK-MW8266D????? */
 uint8_t atk_mw8266d_restore(void);                                          /* ATK-MW8266D??????????? */
 uint8_t atk_mw8266d_at_test(void);                                          /* ATK-MW8266D AT?????? */
 uint8_t atk_mw8266d_set_mode(uint8_t mode);                                 /* ????ATK-MW8266D?????? */
-uint8_t atk_mw8266d_sw_reset(void);                                         /* ATK-MW8266D??????¦Ë */
+uint8_t atk_mw8266d_sw_reset(void);                                         /* ATK-MW8266D???????? */
 uint8_t atk_mw8266d_ate_config(uint8_t cfg);                                /* ATK-MW8266D????????? */
 uint8_t atk_mw8266d_join_ap(char *ssid, char *pwd);                         /* ATK-MW8266D????WIFI */
 uint8_t atk_mw8266d_get_ip(char *buf);                                      /* ATK-MW8266D???IP??? */

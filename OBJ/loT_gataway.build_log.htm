@@ -28,23 +28,21 @@ Project File Date:  01/29/2026
 *** Using Compiler 'V5.06 update 7 (build 960)', folder: 'E:\solftwares\keil_v5\ARM\ARMCC\Bin'
 Build target 'DHT11'
 compiling main.c...
-main.c(152): warning:  #111-D: statement is unreachable
-  	return 0;
-main.c(266): warning:  #167-D: argument of type "char *" is incompatible with parameter of type "u8 *"
+main.c(184): warning:  #111-D: statement is unreachable
+      return 0;
+main.c(279): warning:  #167-D: argument of type "char *" is incompatible with parameter of type "u8 *"
       LCD_ShowString(30,330,200,16,16, ip_buf);
-main.c(185): warning:  #177-D: variable "link_status"  was declared but never referenced
-  	bool  link_status;//??????
-main.c(186): warning:  #177-D: variable "con_status"  was declared but never referenced
-  	bool  con_status;//??????
-main.c(364): warning:  #177-D: variable "link_status"  was declared but never referenced
+main.c(216): warning:  #177-D: variable "link_status"  was declared but never referenced
+      bool  link_status; // WiFi 链路状态（局部）
+main.c(217): warning:  #177-D: variable "con_status"  was declared but never referenced
+      bool  con_status;  // 连接状态（局部）
+main.c(372): warning:  #177-D: variable "link_status"  was declared but never referenced
       bool link_status;
-main.c(53): warning:  #177-D: function "demo_upload_data"  was declared but never referenced
-  static void demo_upload_data(uint8_t is_atkcld)
-main.c: 6 warnings, 0 errors
+main.c: 5 warnings, 0 errors
 linking...
-Program Size: Code=40816 RO-data=18716 RW-data=212 ZI-data=2098676  
+Program Size: Code=42568 RO-data=18716 RW-data=224 ZI-data=2098736  
 FromELF: creating hex file...
-"..\OBJ\loT_gataway.axf" - 0 Error(s), 6 Warning(s).
+"..\OBJ\loT_gataway.axf" - 0 Error(s), 5 Warning(s).
 
 <h2>Software Packages used:</h2>
 
@@ -57,7 +55,7 @@ Package Vendor: Keil
   E:/solftwares/keil_v5/ARM/PACK/Keil/STM32F4xx_DFP/2.17.1/Drivers/CMSIS/Device/ST/STM32F4xx/Include
 
 <h2>Collection of Component Files used:</h2>
-Build Time Elapsed:  00:00:01
+Build Time Elapsed:  00:00:02
 </pre>
 </body>
 </html>

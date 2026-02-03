@@ -1,6 +1,6 @@
 Dependencies for Project 'DHT11', Target 'DHT11': (DO NOT MODIFY !)
 CompilerVersion: 5060960::V5.06 update 7 (build 960)::.\ARMCC
-F (.\main.c)(0x697D981B)(-c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O2 --apcs=interwork --split_sections -I ..\CORE -I ..\OBJ -I ..\USER -I ..\HALLIB\STM32F4xx_HAL_Driver\Inc -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\HARDWARE\LED -I ..\HARDWARE\KEY -I ..\HARDWARE\LCD -I ..\HARDWARE\SDRAM -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\PCF8574 -I ..\HARDWARE\DHT11 -I ..\HARDWARE\AP3216C -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\MemMang -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\ATK_MW8266D -I ..\ATK_MW8266D -I ..\cJSON\Inc -I ..\esp\Inc -I ..\Mqtt\Inc-IE:\solftwares\keil_v5\ARM\PACK\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-D__UVISION_VERSION="539" -DSTM32F429xx -DUSE_HAL_DRIVER -DSTM32F429xx-o ..\obj\main.o --omf_browse ..\obj\main.crf --depend ..\obj\main.d)
+F (.\main.c)(0x69818BC9)(-c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O2 --apcs=interwork --split_sections -I ..\CORE -I ..\OBJ -I ..\USER -I ..\HALLIB\STM32F4xx_HAL_Driver\Inc -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\HARDWARE\LED -I ..\HARDWARE\KEY -I ..\HARDWARE\LCD -I ..\HARDWARE\SDRAM -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\PCF8574 -I ..\HARDWARE\DHT11 -I ..\HARDWARE\AP3216C -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\MemMang -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\ATK_MW8266D -I ..\ATK_MW8266D -I ..\cJSON\Inc -I ..\esp\Inc -I ..\Mqtt\Inc-IE:\solftwares\keil_v5\ARM\PACK\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-D__UVISION_VERSION="539" -DSTM32F429xx -DUSE_HAL_DRIVER -DSTM32F429xx-o ..\obj\main.o --omf_browse ..\obj\main.crf --depend ..\obj\main.d)
 I (..\SYSTEM\sys\sys.h)(0x57CE355E)
 I (..\USER\stm32f4xx.h)(0x57764086)
 I (..\USER\stm32f429xx.h)(0x57764086)
@@ -83,12 +83,12 @@ I (..\HARDWARE\DHT11\dht11.h)(0x57764086)
 I (..\HARDWARE\PCF8574\pcf8574.h)(0x57764086)
 I (..\HARDWARE\IIC\myiic.h)(0x57764086)
 I (..\HARDWARE\AP3216C\ap3216c.h)(0x577640E0)
-I (..\ATK_MW8266D\atk_mw8266d.h)(0x697C7A8A)
-I (..\ATK_MW8266D\atk_mw8266d_uart.h)(0x697B89D9)
+I (..\ATK_MW8266D\atk_mw8266d.h)(0x6980D3B6)
+I (..\ATK_MW8266D\atk_mw8266d_uart.h)(0x6980D3B6)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\stdbool.h)(0x5E8E3CC2)
 I (..\FreeRTOS\include\FreeRTOS.h)(0x573F3A18)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\stddef.h)(0x5E8E3CC2)
-I (..\FreeRTOS\include\FreeRTOSConfig.h)(0x5808814A)
+I (..\FreeRTOS\include\FreeRTOSConfig.h)(0x6980D44F)
 I (..\FreeRTOS\include\projdefs.h)(0x573F3A18)
 I (..\FreeRTOS\include\portable.h)(0x573F3A18)
 I (..\FreeRTOS\include\deprecated_definitions.h)(0x573F3A18)
@@ -1740,7 +1740,7 @@ I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pcd.h)(0x57764084)
 I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_ll_usb.h)(0x57764084)
 I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pcd_ex.h)(0x57764084)
 I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_hcd.h)(0x57764084)
-F (..\SYSTEM\delay\delay.c)(0x57F86DF0)(-c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O2 --apcs=interwork --split_sections -I ..\CORE -I ..\OBJ -I ..\USER -I ..\HALLIB\STM32F4xx_HAL_Driver\Inc -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\HARDWARE\LED -I ..\HARDWARE\KEY -I ..\HARDWARE\LCD -I ..\HARDWARE\SDRAM -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\PCF8574 -I ..\HARDWARE\DHT11 -I ..\HARDWARE\AP3216C -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\MemMang -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\ATK_MW8266D -I ..\ATK_MW8266D -I ..\cJSON\Inc -I ..\esp\Inc -I ..\Mqtt\Inc-IE:\solftwares\keil_v5\ARM\PACK\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-D__UVISION_VERSION="539" -DSTM32F429xx -DUSE_HAL_DRIVER -DSTM32F429xx-o ..\obj\delay.o --omf_browse ..\obj\delay.crf --depend ..\obj\delay.d)
+F (..\SYSTEM\delay\delay.c)(0x69804DC9)(-c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O2 --apcs=interwork --split_sections -I ..\CORE -I ..\OBJ -I ..\USER -I ..\HALLIB\STM32F4xx_HAL_Driver\Inc -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\HARDWARE\LED -I ..\HARDWARE\KEY -I ..\HARDWARE\LCD -I ..\HARDWARE\SDRAM -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\PCF8574 -I ..\HARDWARE\DHT11 -I ..\HARDWARE\AP3216C -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\MemMang -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\ATK_MW8266D -I ..\ATK_MW8266D -I ..\cJSON\Inc -I ..\esp\Inc -I ..\Mqtt\Inc-IE:\solftwares\keil_v5\ARM\PACK\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-D__UVISION_VERSION="539" -DSTM32F429xx -DUSE_HAL_DRIVER -DSTM32F429xx-o ..\obj\delay.o --omf_browse ..\obj\delay.crf --depend ..\obj\delay.d)
 I (..\SYSTEM\delay\delay.h)(0x57F86DF2)
 I (..\SYSTEM\sys\sys.h)(0x57CE355E)
 I (..\USER\stm32f4xx.h)(0x57764086)
@@ -1815,7 +1815,7 @@ I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pcd_ex.h)(0x57764084)
 I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_hcd.h)(0x57764084)
 I (..\FreeRTOS\include\FreeRTOS.h)(0x573F3A18)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\stddef.h)(0x5E8E3CC2)
-I (..\FreeRTOS\include\FreeRTOSConfig.h)(0x5808814A)
+I (..\FreeRTOS\include\FreeRTOSConfig.h)(0x6980D44F)
 I (..\FreeRTOS\include\projdefs.h)(0x573F3A18)
 I (..\FreeRTOS\include\portable.h)(0x573F3A18)
 I (..\FreeRTOS\include\deprecated_definitions.h)(0x573F3A18)
@@ -1895,7 +1895,7 @@ I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pcd.h)(0x57764084)
 I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_ll_usb.h)(0x57764084)
 I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pcd_ex.h)(0x57764084)
 I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_hcd.h)(0x57764084)
-F (..\SYSTEM\usart\usart.c)(0x697B89D9)(-c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O2 --apcs=interwork --split_sections -I ..\CORE -I ..\OBJ -I ..\USER -I ..\HALLIB\STM32F4xx_HAL_Driver\Inc -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\HARDWARE\LED -I ..\HARDWARE\KEY -I ..\HARDWARE\LCD -I ..\HARDWARE\SDRAM -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\PCF8574 -I ..\HARDWARE\DHT11 -I ..\HARDWARE\AP3216C -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\MemMang -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\ATK_MW8266D -I ..\ATK_MW8266D -I ..\cJSON\Inc -I ..\esp\Inc -I ..\Mqtt\Inc-IE:\solftwares\keil_v5\ARM\PACK\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-D__UVISION_VERSION="539" -DSTM32F429xx -DUSE_HAL_DRIVER -DSTM32F429xx-o ..\obj\usart.o --omf_browse ..\obj\usart.crf --depend ..\obj\usart.d)
+F (..\SYSTEM\usart\usart.c)(0x69817AB4)(-c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O2 --apcs=interwork --split_sections -I ..\CORE -I ..\OBJ -I ..\USER -I ..\HALLIB\STM32F4xx_HAL_Driver\Inc -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\HARDWARE\LED -I ..\HARDWARE\KEY -I ..\HARDWARE\LCD -I ..\HARDWARE\SDRAM -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\PCF8574 -I ..\HARDWARE\DHT11 -I ..\HARDWARE\AP3216C -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\MemMang -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\ATK_MW8266D -I ..\ATK_MW8266D -I ..\cJSON\Inc -I ..\esp\Inc -I ..\Mqtt\Inc-IE:\solftwares\keil_v5\ARM\PACK\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-D__UVISION_VERSION="539" -DSTM32F429xx -DUSE_HAL_DRIVER -DSTM32F429xx-o ..\obj\usart.o --omf_browse ..\obj\usart.crf --depend ..\obj\usart.d)
 I (..\SYSTEM\usart\usart.h)(0x697A2F75)
 I (..\SYSTEM\sys\sys.h)(0x57CE355E)
 I (..\USER\stm32f4xx.h)(0x57764086)
@@ -1969,10 +1969,10 @@ I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_ll_usb.h)(0x57764084)
 I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pcd_ex.h)(0x57764084)
 I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_hcd.h)(0x57764084)
 I (..\SYSTEM\delay\delay.h)(0x57F86DF2)
-I (..\ATK_MW8266D\atk_mw8266d_uart.h)(0x697B89D9)
+I (..\ATK_MW8266D\atk_mw8266d_uart.h)(0x6980D3B6)
 I (..\FreeRTOS\include\FreeRTOS.h)(0x573F3A18)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\stddef.h)(0x5E8E3CC2)
-I (..\FreeRTOS\include\FreeRTOSConfig.h)(0x5808814A)
+I (..\FreeRTOS\include\FreeRTOSConfig.h)(0x6980D44F)
 I (..\FreeRTOS\include\projdefs.h)(0x573F3A18)
 I (..\FreeRTOS\include\portable.h)(0x573F3A18)
 I (..\FreeRTOS\include\deprecated_definitions.h)(0x573F3A18)
@@ -2051,7 +2051,7 @@ I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pcd.h)(0x57764084)
 I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_ll_usb.h)(0x57764084)
 I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pcd_ex.h)(0x57764084)
 I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_hcd.h)(0x57764084)
-F (..\HARDWARE\KEY\key.c)(0x577640FA)(-c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O2 --apcs=interwork --split_sections -I ..\CORE -I ..\OBJ -I ..\USER -I ..\HALLIB\STM32F4xx_HAL_Driver\Inc -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\HARDWARE\LED -I ..\HARDWARE\KEY -I ..\HARDWARE\LCD -I ..\HARDWARE\SDRAM -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\PCF8574 -I ..\HARDWARE\DHT11 -I ..\HARDWARE\AP3216C -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\MemMang -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\ATK_MW8266D -I ..\ATK_MW8266D -I ..\cJSON\Inc -I ..\esp\Inc -I ..\Mqtt\Inc-IE:\solftwares\keil_v5\ARM\PACK\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-D__UVISION_VERSION="539" -DSTM32F429xx -DUSE_HAL_DRIVER -DSTM32F429xx-o ..\obj\key.o --omf_browse ..\obj\key.crf --depend ..\obj\key.d)
+F (..\HARDWARE\KEY\key.c)(0x69804DC9)(-c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O2 --apcs=interwork --split_sections -I ..\CORE -I ..\OBJ -I ..\USER -I ..\HALLIB\STM32F4xx_HAL_Driver\Inc -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\HARDWARE\LED -I ..\HARDWARE\KEY -I ..\HARDWARE\LCD -I ..\HARDWARE\SDRAM -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\PCF8574 -I ..\HARDWARE\DHT11 -I ..\HARDWARE\AP3216C -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\MemMang -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\ATK_MW8266D -I ..\ATK_MW8266D -I ..\cJSON\Inc -I ..\esp\Inc -I ..\Mqtt\Inc-IE:\solftwares\keil_v5\ARM\PACK\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-D__UVISION_VERSION="539" -DSTM32F429xx -DUSE_HAL_DRIVER -DSTM32F429xx-o ..\obj\key.o --omf_browse ..\obj\key.crf --depend ..\obj\key.d)
 I (..\HARDWARE\KEY\key.h)(0x577640FA)
 I (..\SYSTEM\sys\sys.h)(0x57CE355E)
 I (..\USER\stm32f4xx.h)(0x57764086)
@@ -2650,12 +2650,12 @@ I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pcd_ex.h)(0x57764084)
 I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_hcd.h)(0x57764084)
 I (..\HARDWARE\IIC\myiic.h)(0x57764086)
 I (..\SYSTEM\delay\delay.h)(0x57F86DF2)
-F (..\readme.txt)(0x577640FA)()
+F (..\readme.txt)(0x00000000)()
 F (..\FreeRTOS\croutine.c)(0x573F3A18)(-c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O2 --apcs=interwork --split_sections -I ..\CORE -I ..\OBJ -I ..\USER -I ..\HALLIB\STM32F4xx_HAL_Driver\Inc -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\HARDWARE\LED -I ..\HARDWARE\KEY -I ..\HARDWARE\LCD -I ..\HARDWARE\SDRAM -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\PCF8574 -I ..\HARDWARE\DHT11 -I ..\HARDWARE\AP3216C -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\MemMang -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\ATK_MW8266D -I ..\ATK_MW8266D -I ..\cJSON\Inc -I ..\esp\Inc -I ..\Mqtt\Inc-IE:\solftwares\keil_v5\ARM\PACK\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-D__UVISION_VERSION="539" -DSTM32F429xx -DUSE_HAL_DRIVER -DSTM32F429xx-o ..\obj\croutine.o --omf_browse ..\obj\croutine.crf --depend ..\obj\croutine.d)
 I (..\FreeRTOS\include\FreeRTOS.h)(0x573F3A18)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\stddef.h)(0x5E8E3CC2)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\stdint.h)(0x5E8E3CC2)
-I (..\FreeRTOS\include\FreeRTOSConfig.h)(0x5808814A)
+I (..\FreeRTOS\include\FreeRTOSConfig.h)(0x6980D44F)
 I (..\SYSTEM\sys\sys.h)(0x57CE355E)
 I (..\USER\stm32f4xx.h)(0x57764086)
 I (..\USER\stm32f429xx.h)(0x57764086)
@@ -2739,7 +2739,7 @@ I (E:\solftwares\keil_v5\ARM\ARMCC\include\stdlib.h)(0x5E8E3CC2)
 I (..\FreeRTOS\include\FreeRTOS.h)(0x573F3A18)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\stddef.h)(0x5E8E3CC2)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\stdint.h)(0x5E8E3CC2)
-I (..\FreeRTOS\include\FreeRTOSConfig.h)(0x5808814A)
+I (..\FreeRTOS\include\FreeRTOSConfig.h)(0x6980D44F)
 I (..\SYSTEM\sys\sys.h)(0x57CE355E)
 I (..\USER\stm32f4xx.h)(0x57764086)
 I (..\USER\stm32f429xx.h)(0x57764086)
@@ -2819,12 +2819,12 @@ I (..\FreeRTOS\include\task.h)(0x573F3A18)
 I (..\FreeRTOS\include\list.h)(0x573F3A18)
 I (..\FreeRTOS\include\timers.h)(0x573F3A18)
 I (..\FreeRTOS\include\event_groups.h)(0x573F3A18)
-F (..\FreeRTOS\list.c)(0x57E7817C)(-c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O2 --apcs=interwork --split_sections -I ..\CORE -I ..\OBJ -I ..\USER -I ..\HALLIB\STM32F4xx_HAL_Driver\Inc -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\HARDWARE\LED -I ..\HARDWARE\KEY -I ..\HARDWARE\LCD -I ..\HARDWARE\SDRAM -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\PCF8574 -I ..\HARDWARE\DHT11 -I ..\HARDWARE\AP3216C -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\MemMang -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\ATK_MW8266D -I ..\ATK_MW8266D -I ..\cJSON\Inc -I ..\esp\Inc -I ..\Mqtt\Inc-IE:\solftwares\keil_v5\ARM\PACK\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-D__UVISION_VERSION="539" -DSTM32F429xx -DUSE_HAL_DRIVER -DSTM32F429xx-o ..\obj\list.o --omf_browse ..\obj\list.crf --depend ..\obj\list.d)
+F (..\FreeRTOS\list.c)(0x697D9C90)(-c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O2 --apcs=interwork --split_sections -I ..\CORE -I ..\OBJ -I ..\USER -I ..\HALLIB\STM32F4xx_HAL_Driver\Inc -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\HARDWARE\LED -I ..\HARDWARE\KEY -I ..\HARDWARE\LCD -I ..\HARDWARE\SDRAM -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\PCF8574 -I ..\HARDWARE\DHT11 -I ..\HARDWARE\AP3216C -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\MemMang -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\ATK_MW8266D -I ..\ATK_MW8266D -I ..\cJSON\Inc -I ..\esp\Inc -I ..\Mqtt\Inc-IE:\solftwares\keil_v5\ARM\PACK\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-D__UVISION_VERSION="539" -DSTM32F429xx -DUSE_HAL_DRIVER -DSTM32F429xx-o ..\obj\list.o --omf_browse ..\obj\list.crf --depend ..\obj\list.d)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\stdlib.h)(0x5E8E3CC2)
 I (..\FreeRTOS\include\FreeRTOS.h)(0x573F3A18)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\stddef.h)(0x5E8E3CC2)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\stdint.h)(0x5E8E3CC2)
-I (..\FreeRTOS\include\FreeRTOSConfig.h)(0x5808814A)
+I (..\FreeRTOS\include\FreeRTOSConfig.h)(0x6980D44F)
 I (..\SYSTEM\sys\sys.h)(0x57CE355E)
 I (..\USER\stm32f4xx.h)(0x57764086)
 I (..\USER\stm32f429xx.h)(0x57764086)
@@ -2907,7 +2907,7 @@ I (E:\solftwares\keil_v5\ARM\ARMCC\include\string.h)(0x5E8E3CC2)
 I (..\FreeRTOS\include\FreeRTOS.h)(0x573F3A18)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\stddef.h)(0x5E8E3CC2)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\stdint.h)(0x5E8E3CC2)
-I (..\FreeRTOS\include\FreeRTOSConfig.h)(0x5808814A)
+I (..\FreeRTOS\include\FreeRTOSConfig.h)(0x6980D44F)
 I (..\SYSTEM\sys\sys.h)(0x57CE355E)
 I (..\USER\stm32f4xx.h)(0x57764086)
 I (..\USER\stm32f429xx.h)(0x57764086)
@@ -2986,13 +2986,13 @@ I (..\FreeRTOS\include\mpu_wrappers.h)(0x573F3A18)
 I (..\FreeRTOS\include\task.h)(0x573F3A18)
 I (..\FreeRTOS\include\list.h)(0x573F3A18)
 I (..\FreeRTOS\include\queue.h)(0x573F3A18)
-F (..\FreeRTOS\tasks.c)(0x573F3A18)(-c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O2 --apcs=interwork --split_sections -I ..\CORE -I ..\OBJ -I ..\USER -I ..\HALLIB\STM32F4xx_HAL_Driver\Inc -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\HARDWARE\LED -I ..\HARDWARE\KEY -I ..\HARDWARE\LCD -I ..\HARDWARE\SDRAM -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\PCF8574 -I ..\HARDWARE\DHT11 -I ..\HARDWARE\AP3216C -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\MemMang -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\ATK_MW8266D -I ..\ATK_MW8266D -I ..\cJSON\Inc -I ..\esp\Inc -I ..\Mqtt\Inc-IE:\solftwares\keil_v5\ARM\PACK\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-D__UVISION_VERSION="539" -DSTM32F429xx -DUSE_HAL_DRIVER -DSTM32F429xx-o ..\obj\tasks.o --omf_browse ..\obj\tasks.crf --depend ..\obj\tasks.d)
+F (..\FreeRTOS\tasks.c)(0x697D9C90)(-c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O2 --apcs=interwork --split_sections -I ..\CORE -I ..\OBJ -I ..\USER -I ..\HALLIB\STM32F4xx_HAL_Driver\Inc -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\HARDWARE\LED -I ..\HARDWARE\KEY -I ..\HARDWARE\LCD -I ..\HARDWARE\SDRAM -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\PCF8574 -I ..\HARDWARE\DHT11 -I ..\HARDWARE\AP3216C -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\MemMang -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\ATK_MW8266D -I ..\ATK_MW8266D -I ..\cJSON\Inc -I ..\esp\Inc -I ..\Mqtt\Inc-IE:\solftwares\keil_v5\ARM\PACK\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-D__UVISION_VERSION="539" -DSTM32F429xx -DUSE_HAL_DRIVER -DSTM32F429xx-o ..\obj\tasks.o --omf_browse ..\obj\tasks.crf --depend ..\obj\tasks.d)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\stdlib.h)(0x5E8E3CC2)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\string.h)(0x5E8E3CC2)
 I (..\FreeRTOS\include\FreeRTOS.h)(0x573F3A18)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\stddef.h)(0x5E8E3CC2)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\stdint.h)(0x5E8E3CC2)
-I (..\FreeRTOS\include\FreeRTOSConfig.h)(0x5808814A)
+I (..\FreeRTOS\include\FreeRTOSConfig.h)(0x6980D44F)
 I (..\SYSTEM\sys\sys.h)(0x57CE355E)
 I (..\USER\stm32f4xx.h)(0x57764086)
 I (..\USER\stm32f429xx.h)(0x57764086)
@@ -3077,7 +3077,7 @@ I (E:\solftwares\keil_v5\ARM\ARMCC\include\stdlib.h)(0x5E8E3CC2)
 I (..\FreeRTOS\include\FreeRTOS.h)(0x573F3A18)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\stddef.h)(0x5E8E3CC2)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\stdint.h)(0x5E8E3CC2)
-I (..\FreeRTOS\include\FreeRTOSConfig.h)(0x5808814A)
+I (..\FreeRTOS\include\FreeRTOSConfig.h)(0x6980D44F)
 I (..\SYSTEM\sys\sys.h)(0x57CE355E)
 I (..\USER\stm32f4xx.h)(0x57764086)
 I (..\USER\stm32f429xx.h)(0x57764086)
@@ -3162,7 +3162,7 @@ I (E:\solftwares\keil_v5\ARM\ARMCC\include\stdlib.h)(0x5E8E3CC2)
 I (..\FreeRTOS\include\FreeRTOS.h)(0x573F3A18)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\stddef.h)(0x5E8E3CC2)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\stdint.h)(0x5E8E3CC2)
-I (..\FreeRTOS\include\FreeRTOSConfig.h)(0x5808814A)
+I (..\FreeRTOS\include\FreeRTOSConfig.h)(0x6980D44F)
 I (..\SYSTEM\sys\sys.h)(0x57CE355E)
 I (..\USER\stm32f4xx.h)(0x57764086)
 I (..\USER\stm32f429xx.h)(0x57764086)
@@ -3244,7 +3244,7 @@ F (..\FreeRTOS\portable\RVDS\ARM_CM4F\port.c)(0x57FDE08A)(-c --cpu Cortex-M4.fp.
 I (..\FreeRTOS\include\FreeRTOS.h)(0x573F3A18)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\stddef.h)(0x5E8E3CC2)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\stdint.h)(0x5E8E3CC2)
-I (..\FreeRTOS\include\FreeRTOSConfig.h)(0x5808814A)
+I (..\FreeRTOS\include\FreeRTOSConfig.h)(0x6980D44F)
 I (..\SYSTEM\sys\sys.h)(0x57CE355E)
 I (..\USER\stm32f4xx.h)(0x57764086)
 I (..\USER\stm32f429xx.h)(0x57764086)
@@ -3322,8 +3322,8 @@ I (..\FreeRTOS\portable\RVDS\ARM_CM4F\portmacro.h)(0x57E1F8B4)
 I (..\FreeRTOS\include\mpu_wrappers.h)(0x573F3A18)
 I (..\FreeRTOS\include\task.h)(0x573F3A18)
 I (..\FreeRTOS\include\list.h)(0x573F3A18)
-F (..\ATK_MW8266D\atk_mw8266d.c)(0x697C7A34)(-c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O2 --apcs=interwork --split_sections -I ..\CORE -I ..\OBJ -I ..\USER -I ..\HALLIB\STM32F4xx_HAL_Driver\Inc -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\HARDWARE\LED -I ..\HARDWARE\KEY -I ..\HARDWARE\LCD -I ..\HARDWARE\SDRAM -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\PCF8574 -I ..\HARDWARE\DHT11 -I ..\HARDWARE\AP3216C -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\MemMang -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\ATK_MW8266D -I ..\ATK_MW8266D -I ..\cJSON\Inc -I ..\esp\Inc -I ..\Mqtt\Inc-IE:\solftwares\keil_v5\ARM\PACK\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-D__UVISION_VERSION="539" -DSTM32F429xx -DUSE_HAL_DRIVER -DSTM32F429xx-o ..\obj\atk_mw8266d.o --omf_browse ..\obj\atk_mw8266d.crf --depend ..\obj\atk_mw8266d.d)
-I (..\ATK_MW8266D\atk_mw8266d.h)(0x697C7A8A)
+F (..\ATK_MW8266D\atk_mw8266d.c)(0x6980D3B6)(-c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O2 --apcs=interwork --split_sections -I ..\CORE -I ..\OBJ -I ..\USER -I ..\HALLIB\STM32F4xx_HAL_Driver\Inc -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\HARDWARE\LED -I ..\HARDWARE\KEY -I ..\HARDWARE\LCD -I ..\HARDWARE\SDRAM -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\PCF8574 -I ..\HARDWARE\DHT11 -I ..\HARDWARE\AP3216C -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\MemMang -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\ATK_MW8266D -I ..\ATK_MW8266D -I ..\cJSON\Inc -I ..\esp\Inc -I ..\Mqtt\Inc-IE:\solftwares\keil_v5\ARM\PACK\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-D__UVISION_VERSION="539" -DSTM32F429xx -DUSE_HAL_DRIVER -DSTM32F429xx-o ..\obj\atk_mw8266d.o --omf_browse ..\obj\atk_mw8266d.crf --depend ..\obj\atk_mw8266d.d)
+I (..\ATK_MW8266D\atk_mw8266d.h)(0x6980D3B6)
 I (..\SYSTEM\sys\sys.h)(0x57CE355E)
 I (..\USER\stm32f4xx.h)(0x57764086)
 I (..\USER\stm32f429xx.h)(0x57764086)
@@ -3395,11 +3395,11 @@ I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pcd.h)(0x57764084)
 I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_ll_usb.h)(0x57764084)
 I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_pcd_ex.h)(0x57764084)
 I (..\HALLIB\STM32F4xx_HAL_Driver\Inc\stm32f4xx_hal_hcd.h)(0x57764084)
-I (..\ATK_MW8266D\atk_mw8266d_uart.h)(0x697B89D9)
+I (..\ATK_MW8266D\atk_mw8266d_uart.h)(0x6980D3B6)
 I (..\SYSTEM\delay\delay.h)(0x57F86DF2)
 I (E:\solftwares\keil_v5\ARM\ARMCC\include\string.h)(0x5E8E3CC2)
-F (..\ATK_MW8266D\atk_mw8266d_uart.c)(0x697C7A34)(-c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O2 --apcs=interwork --split_sections -I ..\CORE -I ..\OBJ -I ..\USER -I ..\HALLIB\STM32F4xx_HAL_Driver\Inc -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\HARDWARE\LED -I ..\HARDWARE\KEY -I ..\HARDWARE\LCD -I ..\HARDWARE\SDRAM -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\PCF8574 -I ..\HARDWARE\DHT11 -I ..\HARDWARE\AP3216C -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\MemMang -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\ATK_MW8266D -I ..\ATK_MW8266D -I ..\cJSON\Inc -I ..\esp\Inc -I ..\Mqtt\Inc-IE:\solftwares\keil_v5\ARM\PACK\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-D__UVISION_VERSION="539" -DSTM32F429xx -DUSE_HAL_DRIVER -DSTM32F429xx-o ..\obj\atk_mw8266d_uart.o --omf_browse ..\obj\atk_mw8266d_uart.crf --depend ..\obj\atk_mw8266d_uart.d)
-I (..\ATK_MW8266D\atk_mw8266d_uart.h)(0x697B89D9)
+F (..\ATK_MW8266D\atk_mw8266d_uart.c)(0x69817AC2)(-c --cpu Cortex-M4.fp.sp -D__MICROLIB -g -O2 --apcs=interwork --split_sections -I ..\CORE -I ..\OBJ -I ..\USER -I ..\HALLIB\STM32F4xx_HAL_Driver\Inc -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\HARDWARE\LED -I ..\HARDWARE\KEY -I ..\HARDWARE\LCD -I ..\HARDWARE\SDRAM -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\PCF8574 -I ..\HARDWARE\DHT11 -I ..\HARDWARE\AP3216C -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\MemMang -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\ATK_MW8266D -I ..\ATK_MW8266D -I ..\cJSON\Inc -I ..\esp\Inc -I ..\Mqtt\Inc-IE:\solftwares\keil_v5\ARM\PACK\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-D__UVISION_VERSION="539" -DSTM32F429xx -DUSE_HAL_DRIVER -DSTM32F429xx-o ..\obj\atk_mw8266d_uart.o --omf_browse ..\obj\atk_mw8266d_uart.crf --depend ..\obj\atk_mw8266d_uart.d)
+I (..\ATK_MW8266D\atk_mw8266d_uart.h)(0x6980D3B6)
 I (..\SYSTEM\sys\sys.h)(0x57CE355E)
 I (..\USER\stm32f4xx.h)(0x57764086)
 I (..\USER\stm32f429xx.h)(0x57764086)

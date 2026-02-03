@@ -46,6 +46,7 @@ void SysTick_Handler(void)
 //SYSCLK:系统时钟频率
 void delay_init(u8 SYSCLK)
 {
+
 	u32 reload;
     HAL_SYSTICK_CLKSourceConfig(SYSTICK_CLKSOURCE_HCLK);//SysTick频率为HCLK
 	fac_us=SYSCLK;						    //不论是否使用OS,fac_us都需要使用

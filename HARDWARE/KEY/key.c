@@ -26,7 +26,8 @@ void KEY_Init(void)
     GPIO_Initure.Mode=GPIO_MODE_INPUT;      //输入
     GPIO_Initure.Pull=GPIO_PULLDOWN;        //下拉
     GPIO_Initure.Speed=GPIO_SPEED_HIGH;     //高速
-    HAL_GPIO_Init(GPIOA,&GPIO_Initure);
+    HAL_GPIO_Init(GPIOA,&GPIO_Initure);                 
+    
     
     GPIO_Initure.Pin=GPIO_PIN_13;           //PC13
     GPIO_Initure.Mode=GPIO_MODE_INPUT;      //输入

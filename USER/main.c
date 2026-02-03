@@ -38,6 +38,8 @@
 #define MQTT_USER_NAME          ""
 #define MQTT_PASSWORD           ""
 #define MQTT_TOPIC_PUB          "test/topic"
+#define MQTT_TOPIC_SUB          "test/topic_sub"
+
 
 /**
  * @brief       处理接收并打印 ATK-MW8266D UART 数据
@@ -81,6 +83,7 @@ typedef struct{
 #define AP3216C_TASK_PRIO  3
 #define LCD_TASK_PRIO 2
 #define NET_TASK_PRIO 4
+#define RUN_TIME_STATS_TASK_PRIO 2
 
 // 任务栈大小（字）
 #define START_STK_SIZE 128
@@ -89,6 +92,7 @@ typedef struct{
 #define AP3216C_STK_SIZE 128
 #define LCD_STK_SIZE 128
 #define NET_STK_SIZE 500
+#define RUN_TIME_STATS_STK_SIZE 256
 
 // 任务句柄
 TaskHandle_t StartTask_Handler;
@@ -97,6 +101,7 @@ TaskHandle_t DHT11Task_Handler;
 TaskHandle_t AP3216CTask_Handler;
 TaskHandle_t LCDTask_Handler;
 TaskHandle_t NETTask_Handler;
+TaskHandle_t RunTimeStatsTask_Handler;
 
 // 任务函数原型
 void start_task(void *pv);
@@ -105,6 +110,7 @@ void dht11_task(void *pv);
 void ap3216c_task(void *pv);
 void lcd_task(void *pv);
 void net_task(void *pv);
+void run_time_stats_task(void *pv);
 
 // 队列与互斥量
 QueueHandle_t xDHT11Queue;
@@ -115,6 +121,48 @@ u8 ret;
 char ip_buf[16];
 bool  link_status; // WiFi 链路状态（示例变量）
 bool  con_status;  // MQTT 连接状态（示例变量）
+
+TIM_HandleTypeDef htim2;
+
+/**
+ * @brief       配置 FreeRTOS 运行时间统计定时器 (TIM2)
+ *              TIM2 是 32 位定时器，非常适合作为运行时基
+ *              APB1 时钟为 45MHz，定时器时钟为 90MHz
+ *              设置 20kHz 频率 (50us 精度)，比系统节拍 (1kHz) 快 20 倍
+ */
+void ConfigureTimeForRunTimeStats(void)
+{
+    TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+    TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+    __HAL_RCC_TIM2_CLK_ENABLE();
+
+    htim2.Instance = TIM2;
+    htim2.Init.Prescaler = 4499; // 90MHz / (4499+1) = 20kHz
+    htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+    htim2.Init.Period = 0xFFFFFFFF; // 32位最大值
+    //htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+    
+    HAL_TIM_Base_Init(&htim2);
+    
+    sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+    HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig);
+
+    sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+    sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+    HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig);
+
+    HAL_TIM_Base_Start(&htim2);
+}
+
+/**
+ * @brief       获取运行时间计数器值
+ * @retval      计数器当前值
+ */
+uint32_t GetTimerCounterValue(void)
+{
+    return __HAL_TIM_GET_COUNTER(&htim2);
+}
 
 int main(void)
 {
@@ -154,6 +202,7 @@ void start_task(void *pv)
     xTaskCreate(ap3216c_task,"ap3216c_task",AP3216C_STK_SIZE, NULL, AP3216C_TASK_PRIO, &AP3216CTask_Handler);
     xTaskCreate(lcd_task,    "lcd_task",    LCD_STK_SIZE, NULL, LCD_TASK_PRIO, &LCDTask_Handler);
     xTaskCreate(net_task,    "net_task",    NET_STK_SIZE, NULL, NET_TASK_PRIO, &NETTask_Handler);
+    xTaskCreate(run_time_stats_task, "stats_task", RUN_TIME_STATS_STK_SIZE, NULL, RUN_TIME_STATS_TASK_PRIO, &RunTimeStatsTask_Handler);
 
     // 删除当前启动任务
     vTaskDelete(NULL);
@@ -240,15 +289,17 @@ void dht11_task(void *pv)
     while (1)
     {
         // 通过 PCF8574 触发或准备 DHT11 的 IO（如果使用扩展 IO）
-        PCF8574_ReadBit(BEEP_IO);
+         PCF8574_ReadBit(BEEP_IO);
 
         // 读取 DHT11 数据（温度和湿度）
-        DHT11_Read_Data(&dht11_data.temperature,&dht11_data.humidity);
+         DHT11_Read_Data(&dht11_data.temperature,&dht11_data.humidity);
     
         // 将数据发送到队列
-        xQueueSend(xDHT11Queue,&dht11_data,0);
+         xQueueSend(xDHT11Queue,&dht11_data,0);
 
-        vTaskDelay(pdMS_TO_TICKS(100));
+        // demo_upload_data(1); // 移至 net_task 处理，避免多任务竞争 UART
+
+        vTaskDelay(pdMS_TO_TICKS(2000)); // 降低采样频率，给 MQTT 接收留出时间
     }
 }
 
@@ -264,7 +315,7 @@ void ap3216c_task(void *pv)
         // 发送到队列供显示或网络任务使用
         xQueueSend(xAP3216CQueue,&ap3216c_data,0);
 
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(2000)); // 降低采样频率
     }
 }
 
@@ -359,7 +410,7 @@ void net_task(void *pv)
                     con_status = 1;
                     
                     // 3. 订阅主题（如果需要）
-                    atk_mw8266d_mqtt_sub(MQTT_TOPIC_PUB, 0);
+                    atk_mw8266d_mqtt_sub(MQTT_TOPIC_SUB, 0);
                 }
                 else
                 {
@@ -392,7 +443,7 @@ void net_task(void *pv)
 
         // 如果连接已建立，采集并发布传感器数据
 
-        // 发布 DHT11 数据
+        // // 发布 DHT11 数据
         if (xQueueReceive(xDHT11Queue, &dht11_data, pdMS_TO_TICKS(50)) == pdTRUE)
         {
             // 构建 JSON 字符串
@@ -430,7 +481,42 @@ void net_task(void *pv)
                 printf("MQTT Pub Failed!\r\n");
             }
         }
+        
+        // 检查是否有接收到的 MQTT 消息 (在非发布期间检查)
+        demo_upload_data(1);
 
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
+
+/**
+ * @brief       FreeRTOS 运行时间统计任务
+ *              打印任务名称、运行时间绝对值、CPU 使用率百分比
+ */
+void run_time_stats_task(void *pv)
+{
+    char pcWriteBuffer[512];
+    
+    while (1)
+    {
+        
+        vTaskGetRunTimeStats(pcWriteBuffer);
+
+        printf("TaskName\tAbsTime\t\tTime%%\r\n%s\r\n", pcWriteBuffer);
+        
+        // 每 5 秒打印一次
+        vTaskDelay(pdMS_TO_TICKS(5000));
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
