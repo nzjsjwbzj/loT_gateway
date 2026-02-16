@@ -84,9 +84,10 @@
 ..\obj\main.o: ..\HARDWARE\AP3216C\ap3216c.h
 ..\obj\main.o: ..\ATK_MW8266D\atk_mw8266d.h
 ..\obj\main.o: ..\ATK_MW8266D\atk_mw8266d_uart.h
+..\obj\main.o: ..\cJSON\Inc\cJSON.h
+..\obj\main.o: E:\solftwares\keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
 ..\obj\main.o: E:\solftwares\keil_v5\ARM\ARMCC\Bin\..\include\stdbool.h
 ..\obj\main.o: ..\FreeRTOS\include\FreeRTOS.h
-..\obj\main.o: E:\solftwares\keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
 ..\obj\main.o: ..\FreeRTOS\include\FreeRTOSConfig.h
 ..\obj\main.o: ..\FreeRTOS\include\projdefs.h
 ..\obj\main.o: ..\FreeRTOS\include\portable.h

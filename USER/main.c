@@ -10,6 +10,7 @@
 #include "ap3216c.h"
 #include "atk_mw8266d.h"
 #include "atk_mw8266d_uart.h"
+#include "cJSON.h"
 
 #include <stdbool.h>
 
@@ -18,23 +19,23 @@
 #include "queue.h"
 #include "semphr.h"
 /************************************************
- 例程基于 ALIENTEK 开发板 STM32F429 适配移植
- DHT11 与 AP3216C 演示（基于 HAL 库）
- 参考资料: www.openedv.com
- 作者: ALIENTEK
+ ??????? ALIENTEK ?????? STM32F429 ???????
+ DHT11 ?? AP3216C ????????? HAL ??
+ ????????: www.openedv.com
+ ????: ALIENTEK
 ************************************************/
 #define DEMO_WIFI_SSID          "CMCC-X22b"
 #define DEMO_WIFI_PWD           "gp24ghzf"
 #define DEMO_ATKCLD_DEV_ID      "63152966615081879519"
 #define DEMO_ATKCLD_DEV_PWD     "12345678"
 
-// MQTT 代理地址示例
+// MQTT ??????????
 // #define MQTT_BROKER_IP          "broker.emqx.io"
-// 使用本地 Broker（例如 Mosquitto 监听 1883）
+// ?????? Broker?????? Mosquitto ???? 1883??
 #define MQTT_BROKER_IP          "192.168.1.28"
 #define MQTT_BROKER_PORT        "1883"
 #define MQTT_CLIENT_ID          "STM32_F429_Client_Test"
-// 如果 Broker 要求用户名/密码可填写
+// ??? Broker ????????/?????????
 #define MQTT_USER_NAME          ""
 #define MQTT_PASSWORD           ""
 #define MQTT_TOPIC_PUB          "test/topic"
@@ -42,10 +43,10 @@
 
 
 /**
- * @brief       处理接收并打印 ATK-MW8266D UART 数据
- * @param       is_atkcld: 0: 不处理 ATK-CLD
- *                         1: 处理 ATK-MW8266D UART 收到的数据
- * @retval      无
+ * @brief       ???????????? ATK-MW8266D UART ????
+ * @param       is_atkcld: 0: ?????? ATK-CLD
+ *                         1: ???? ATK-MW8266D UART ?????????
+ * @retval      ??
  */
 static void demo_upload_data(uint8_t is_atkcld)
 {
@@ -53,13 +54,14 @@ static void demo_upload_data(uint8_t is_atkcld)
     
     if (is_atkcld == 1)
     {
-        /* 获取 ATK-MW8266D UART 接收缓冲帧 */
+        /* ??? ATK-MW8266D UART ???????? */
         buf = atk_mw8266d_uart_rx_get_frame();
         if (buf != NULL)
         {
             printf("%s", buf);
-            /* 处理后重启 UART 接收缓冲 */
+            /* ?????????? UART ??????? */
             atk_mw8266d_uart_rx_restart();
+
         }
     }
 }
@@ -76,7 +78,7 @@ typedef struct{
     u16 als;
 } AP3216C_Data_t;
 
-// 任务优先级
+// ?????????
 #define START_TASK_PRIO  1
 #define INIT_TASK_PRIO  5
 #define DHT11_TASK_PRIO  3
@@ -84,8 +86,9 @@ typedef struct{
 #define LCD_TASK_PRIO 2
 #define NET_TASK_PRIO 4
 #define RUN_TIME_STATS_TASK_PRIO 2
+#define DATA_PROCESS_TASK_PRIO 4  // ????????????????
 
-// 任务栈大小（字）
+// ??????????????
 #define START_STK_SIZE 128
 #define INIT_STK_SIZE 128
 #define DHT11_STK_SIZE 128
@@ -93,8 +96,9 @@ typedef struct{
 #define LCD_STK_SIZE 128
 #define NET_STK_SIZE 500
 #define RUN_TIME_STATS_STK_SIZE 256
+#define DATA_PROCESS_STK_SIZE 256 // ?????????????
 
-// 任务句柄
+// ??????
 TaskHandle_t StartTask_Handler;
 TaskHandle_t InitTask_Handler;
 TaskHandle_t DHT11Task_Handler;
@@ -102,8 +106,9 @@ TaskHandle_t AP3216CTask_Handler;
 TaskHandle_t LCDTask_Handler;
 TaskHandle_t NETTask_Handler;
 TaskHandle_t RunTimeStatsTask_Handler;
+TaskHandle_t DataProcessTask_Handler; // ?????????????
 
-// 任务函数原型
+// ?????????
 void start_task(void *pv);
 void init_task(void *pv);
 void dht11_task(void *pv);
@@ -111,24 +116,26 @@ void ap3216c_task(void *pv);
 void lcd_task(void *pv);
 void net_task(void *pv);
 void run_time_stats_task(void *pv);
+void data_process_task(void *pv); // ???????????
 
-// 队列与互斥量
+// ??????????
 QueueHandle_t xDHT11Queue;
 QueueHandle_t xAP3216CQueue;
+QueueHandle_t xUartRxQueue; // UART ???????????
 SemaphoreHandle_t xLCDMutex;
 
 u8 ret;
 char ip_buf[16];
-bool  link_status; // WiFi 链路状态（示例变量）
-bool  con_status;  // MQTT 连接状态（示例变量）
+bool  link_status; // WiFi ?????????????????
+bool  con_status;  // MQTT ?????????????????
 
 TIM_HandleTypeDef htim2;
 
 /**
- * @brief       配置 FreeRTOS 运行时间统计定时器 (TIM2)
- *              TIM2 是 32 位定时器，非常适合作为运行时基
- *              APB1 时钟为 45MHz，定时器时钟为 90MHz
- *              设置 20kHz 频率 (50us 精度)，比系统节拍 (1kHz) 快 20 倍
+ * @brief       ???? FreeRTOS ?????????????? (TIM2)
+ *              TIM2 ?? 32 ?????????????????????????
+ *              APB1 ???? 45MHz??????????? 90MHz
+ *              ???? 20kHz ??? (50us ????)?????????? (1kHz) ?? 20 ??
  */
 void ConfigureTimeForRunTimeStats(void)
 {
@@ -140,7 +147,7 @@ void ConfigureTimeForRunTimeStats(void)
     htim2.Instance = TIM2;
     htim2.Init.Prescaler = 4499; // 90MHz / (4499+1) = 20kHz
     htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-    htim2.Init.Period = 0xFFFFFFFF; // 32位最大值
+    htim2.Init.Period = 0xFFFFFFFF; // 32??????
     //htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
     
     HAL_TIM_Base_Init(&htim2);
@@ -156,8 +163,8 @@ void ConfigureTimeForRunTimeStats(void)
 }
 
 /**
- * @brief       获取运行时间计数器值
- * @retval      计数器当前值
+ * @brief       ????????????????
+ * @retval      ??????????
  */
 uint32_t GetTimerCounterValue(void)
 {
@@ -166,15 +173,17 @@ uint32_t GetTimerCounterValue(void)
 
 int main(void)
 {
-    HAL_Init();                     // 初始化 HAL 库
-    Stm32_Clock_Init(360,25,2,8);   // 配置系统时钟，目标 180MHz
-    delay_init(180);                // 延时初始化（按时钟）
-    uart_init(115200);              // 串口初始化
-    LED_Init();                     // LED 初始化
-    KEY_Init();                     // 按键初始化
-    SDRAM_Init();                   // SDRAM 初始化
+    HAL_Init();                     // ????? HAL ??
+    HAL_NVIC_SetPriorityGrouping(NVIC_PRIORITYGROUP_4);
 
-    // 创建启动任务并开始调度
+    Stm32_Clock_Init(360,25,2,8);   // ????????????? 180MHz
+    delay_init(180);                // ????????????????
+    uart_init(115200);              // ????????
+    LED_Init();                     // LED ?????
+    KEY_Init();                     // ?????????
+    SDRAM_Init();                   // SDRAM ?????
+
+    // ??????????????????
     xTaskCreate(start_task,"start_task",START_STK_SIZE,NULL,START_TASK_PRIO,&StartTask_Handler);
     vTaskStartScheduler();  
     
@@ -185,26 +194,33 @@ int main(void)
 
 void start_task(void *pv)
 {
-    // 创建队列和互斥量
+    // ???????????????
     xDHT11Queue = xQueueCreate(5, sizeof(DHT11_Data_t));
     xAP3216CQueue = xQueueCreate(5, sizeof(AP3216C_Data_t));
+    xUartRxQueue = xQueueCreate(10, sizeof(uint16_t)); // ?????????????????
     xLCDMutex = xSemaphoreCreateMutex();
 
-    // 检查资源创建是否成功
-    if (xDHT11Queue == NULL || xAP3216CQueue == NULL || xLCDMutex == NULL) {
-        printf("资源创建失败，队列或互斥量创建出错\r\n");
-        // 这里可以根据需要处理错误（如重启或断言）
+    cJSON_Hooks hooks;
+    hooks.malloc_fn = pvPortMalloc;
+    hooks.free_fn = vPortFree;
+    cJSON_InitHooks(&hooks);
+
+    // ???????????????
+    if (xDHT11Queue == NULL || xAP3216CQueue == NULL || xLCDMutex == NULL || xUartRxQueue == NULL) {
+        printf("????????????????????????????\r\n");
+        // ?????????????????????????????????
     }
 
-    // 创建其他任务
+    // ????????????
     xTaskCreate(init_task,   "init_task",   INIT_STK_SIZE, NULL, INIT_TASK_PRIO, &InitTask_Handler);
     xTaskCreate(dht11_task,  "dht11_task",  DHT11_STK_SIZE, NULL, DHT11_TASK_PRIO, &DHT11Task_Handler);
     xTaskCreate(ap3216c_task,"ap3216c_task",AP3216C_STK_SIZE, NULL, AP3216C_TASK_PRIO, &AP3216CTask_Handler);
     xTaskCreate(lcd_task,    "lcd_task",    LCD_STK_SIZE, NULL, LCD_TASK_PRIO, &LCDTask_Handler);
     xTaskCreate(net_task,    "net_task",    NET_STK_SIZE, NULL, NET_TASK_PRIO, &NETTask_Handler);
     xTaskCreate(run_time_stats_task, "stats_task", RUN_TIME_STATS_STK_SIZE, NULL, RUN_TIME_STATS_TASK_PRIO, &RunTimeStatsTask_Handler);
+   // xTaskCreate(data_process_task,   "data_process", DATA_PROCESS_STK_SIZE, NULL, DATA_PROCESS_TASK_PRIO, &DataProcessTask_Handler);
 
-    // 删除当前启动任务
+    // ??????????????
     vTaskDelete(NULL);
 }
 
@@ -212,16 +228,16 @@ void init_task(void *pv)
 {
     u8 ret;
     char ip_buf[16];
-    bool  link_status; // WiFi 链路状态（局部）
-    bool  con_status;  // 连接状态（局部）
+    bool  link_status; // WiFi ?????????
+    bool  con_status;  // MQTT ?????????
 
-    LCD_Init();                     // LCD 初始化
-    PCF8574_Init();                 // PCF8574 初始化（扩展 IO）
+    LCD_Init();                     // LCD ?????
+    PCF8574_Init();                 // PCF8574 ???IO?????
 
-    // 读取 PCF8574 上某位以确保 I/O 已就绪（例如用于 DHT11 的引脚）
+    // ??? PCF8574 ???IO??????????? I/O ??????????????????? DHT11 ????????
     PCF8574_ReadBit(BEEP_IO);
 
-    // 初始化 AP3216C，失败时在 LCD 上提示并重试
+    // ????????? AP3216C?????? LCD ??????????
     while(AP3216C_Init())
     {
         LCD_ShowString(30,190,200,16,16,"AP3216C Check Failed!");
@@ -230,7 +246,7 @@ void init_task(void *pv)
         delay_xms(500);
     }    
     
-    // 显示初始界面
+    // ??????????
     POINT_COLOR=BLUE;
     LCD_ShowString(30,150,200,16,16,"Temp:  C");    
     LCD_ShowString(30,170,200,16,16,"Humi:  %");
@@ -242,13 +258,13 @@ void init_task(void *pv)
     LCD_ShowString(30,250,200,16,16," PS:");    
     LCD_ShowString(30,280,200,16,16,"ALS:");
 
-    printf("初始化中...\r\n");
+    printf("????????...\r\n");
 
-    /* 初始化 ATK-MW8266D WiFi 模块 */
+    /* ????? ATK-MW8266D WiFi ??? */
     ret = atk_mw8266d_init(115200);
     if (ret != 0)
     {
-        printf("ATK-MW8266D 初始化失败!\r\n");
+        printf("ATK-MW8266D ????????!\r\n");
         while (1)
         {
             LED0=!LED0;
@@ -256,17 +272,17 @@ void init_task(void *pv)
         }
     }
     
-    printf("正在加入 AP...\r\n");
-    ret  = atk_mw8266d_restore();                               /* 恢复出厂或初始化状态 */
-    ret += atk_mw8266d_at_test();                               /* 测试 AT 指令 */
-    ret += atk_mw8266d_set_mode(1);                             /* 设置为 Station 模式 */
-    ret += atk_mw8266d_sw_reset();                              /* 软件复位模块 */
-    ret += atk_mw8266d_ate_config(0);                           /* 关闭回显 */
-    ret += atk_mw8266d_join_ap(DEMO_WIFI_SSID, DEMO_WIFI_PWD);  /* 连接 WiFi */
-    ret += atk_mw8266d_get_ip(ip_buf);                          /* 获取分配的 IP */
+    printf("???????? AP...\r\n");
+    ret  = atk_mw8266d_restore();                               /* ??????????? */
+    ret += atk_mw8266d_at_test();                               /* ???? AT ??? */
+    ret += atk_mw8266d_set_mode(1);                             /* ????? Station ?? */
+    ret += atk_mw8266d_sw_reset();                              /* ??????????? */
+    ret += atk_mw8266d_ate_config(0);                           /* ?????? */
+    ret += atk_mw8266d_join_ap(DEMO_WIFI_SSID, DEMO_WIFI_PWD);  /* ???? WiFi */
+    ret += atk_mw8266d_get_ip(ip_buf);                          /* ??????? IP */
     if (ret != 0)
     {
-        printf("加入 AP 失败!\r\n");
+        printf("???? AP ???!\r\n");
         while (1)
         {
             LED0=!LED0;
@@ -277,7 +293,7 @@ void init_task(void *pv)
     printf("IP: %s\r\n", ip_buf);
     LCD_ShowString(30,330,200,16,16, ip_buf);
     
-    /* 启动 ATK-MW8266D UART 接收 */
+    /* ???? ATK-MW8266D UART ???? */
     atk_mw8266d_uart_rx_restart();
     vTaskDelete(NULL);
 }
@@ -288,18 +304,18 @@ void dht11_task(void *pv)
     
     while (1)
     {
-        // 通过 PCF8574 触发或准备 DHT11 的 IO（如果使用扩展 IO）
-         PCF8574_ReadBit(BEEP_IO);
+        // // ??? PCF8574 ????? DHT11 ???????? IO ??????????? IO ????
+        //  PCF8574_ReadBit(BEEP_IO);
 
-        // 读取 DHT11 数据（温度和湿度）
-         DHT11_Read_Data(&dht11_data.temperature,&dht11_data.humidity);
+        // // ??? DHT11 ?????????
+        //  DHT11_Read_Data(&dht11_data.temperature,&dht11_data.humidity);
     
-        // 将数据发送到队列
-         xQueueSend(xDHT11Queue,&dht11_data,0);
+        // // ??????????????
+        //  xQueueSend(xDHT11Queue,&dht11_data,0);
 
-        // demo_upload_data(1); // 移至 net_task 处理，避免多任务竞争 UART
+        // demo_upload_data(1); // ???? net_task ?????????? ATK-MW8266D UART ????
 
-        vTaskDelay(pdMS_TO_TICKS(2000)); // 降低采样频率，给 MQTT 接收留出时间
+        vTaskDelay(pdMS_TO_TICKS(2000)); // ????????????????? MQTT ???????????
     }
 }
 
@@ -309,13 +325,13 @@ void ap3216c_task(void *pv)
 
     while(1)
     {
-        // 读取 AP3216C 数据（红外、接近、环境光）
+        // ??? AP3216C ?????????????????????????
         AP3216C_ReadData(&ap3216c_data.ir,&ap3216c_data.ps,&ap3216c_data.als);
 
-        // 发送到队列供显示或网络任务使用
+        // ?????????????????????????????
         xQueueSend(xAP3216CQueue,&ap3216c_data,0);
 
-        vTaskDelay(pdMS_TO_TICKS(2000)); // 降低采样频率
+        vTaskDelay(pdMS_TO_TICKS(2000)); // ??????
     }
 }
 
@@ -326,14 +342,14 @@ void lcd_task(void *pv)
 
     while(1)
     {
-        // 从 DHT11 队列接收并更新 LCD
+        // ?? DHT11 ????????????????? LCD
         if(xQueueReceive(xDHT11Queue,&dht11_data,pdMS_TO_TICKS(100))==pdTRUE){
              if(xSemaphoreTake(xLCDMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-                 // 更新温度显示
+                 // ???????
                  LCD_Fill(30+40, 150, 30+40+16, 150+16, WHITE);
                  LCD_ShowNum(30+40, 150, dht11_data.temperature, 2, 16);
                  
-                 // 更新湿度显示
+                 // ???????
                  LCD_Fill(30+40, 170, 30+40+16, 170+16, WHITE);
                  LCD_ShowNum(30+40, 170, dht11_data.humidity, 2, 16);
                  
@@ -341,18 +357,18 @@ void lcd_task(void *pv)
              }
         }
 
-        // 从 AP3216C 队列接收并更新 LCD
+        // ?? AP3216C ????????????????? LCD
         if(xQueueReceive(xAP3216CQueue, &ap3216c_data, pdMS_TO_TICKS(100)) == pdTRUE) {
             if(xSemaphoreTake(xLCDMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-                // 更新 IR
+                // ??? IR ?
                 LCD_Fill(30+32, 220, 30+32+40, 220+16, WHITE);
                 LCD_ShowNum(30+32, 220, ap3216c_data.ir, 5, 16);
                 
-                // 更新 PS
+                // ??? PS ?
                 LCD_Fill(30+32, 250, 30+32+40, 250+16, WHITE);
                 LCD_ShowNum(30+32, 250, ap3216c_data.ps, 5, 16);
                 
-                // 更新 ALS
+                // ??? ALS ?
                 LCD_Fill(30+32, 280, 30+32+40, 280+16, WHITE);
                 LCD_ShowNum(30+32, 280, ap3216c_data.als, 5, 16);
                 
@@ -360,7 +376,7 @@ void lcd_task(void *pv)
             }
         }
         
-        vTaskDelay(pdMS_TO_TICKS(50));  // 界面刷新延时
+        vTaskDelay(pdMS_TO_TICKS(50));  // ??????
     }
 }
 
@@ -373,19 +389,24 @@ void net_task(void *pv)
     u8 key;
     char json_buf[256];
 
+
+    uint16_t rx_len;
+    uint8_t *buf;
+
+
     while (1)
     {
         key = KEY_Scan(0);
 
         switch (key)
         {
-            case KEY0_PRES: // 尝试连接到 MQTT Broker
+            case KEY0_PRES: // ???? MQTT Broker
                 printf("Connecting to MQTT Broker...\r\n");
                 
-                // 0. 测试连通性（ping）
+                // 0. ??????????????ping
                 atk_mw8266d_ping(MQTT_BROKER_IP);
 
-                // 1. 配置 MQTT 用户信息（尝试不同 scheme）
+                // 1. ???? MQTT ????????????? scheme 1
                 if (atk_mw8266d_mqtt_usercfg(1, MQTT_CLIENT_ID, MQTT_USER_NAME, MQTT_PASSWORD) == ATK_MW8266D_EOK)
                 {
                     printf("MQTT User Configured.\r\n");
@@ -403,13 +424,13 @@ void net_task(void *pv)
                     }
                 }
                 
-                // 2. 连接 Broker
+                // 2. ???? Broker
                 if (atk_mw8266d_mqtt_conn(MQTT_BROKER_IP, MQTT_BROKER_PORT, 0) == ATK_MW8266D_EOK)
                 {
                     printf("MQTT Connected!\r\n");
                     con_status = 1;
                     
-                    // 3. 订阅主题（如果需要）
+                    // 3. ???????????????????????
                     atk_mw8266d_mqtt_sub(MQTT_TOPIC_SUB, 0);
                 }
                 else
@@ -419,7 +440,7 @@ void net_task(void *pv)
                 }
                 break;
 
-            case KEY1_PRES: // 断开 MQTT
+            case KEY1_PRES: // ??? MQTT
                 if (atk_mw8266d_mqtt_clean() == ATK_MW8266D_EOK)
                 {
                     printf("MQTT Disconnected!\r\n");
@@ -441,57 +462,82 @@ void net_task(void *pv)
             continue;
         }
 
-        // 如果连接已建立，采集并发布传感器数据
+        // ?????????????????????????
 
-        // // 发布 DHT11 数据
-        if (xQueueReceive(xDHT11Queue, &dht11_data, pdMS_TO_TICKS(50)) == pdTRUE)
-        {
-            // 构建 JSON 字符串
-            snprintf(json_buf, sizeof(json_buf),
-                     "{\"temp\":%d,\"humi\":%d}",
-                     dht11_data.temperature,
-                     dht11_data.humidity);
+        // // 读取 DHT11 数据
+        // if (xQueueReceive(xDHT11Queue, &dht11_data, pdMS_TO_TICKS(50)) == pdTRUE)
+        // {
+        //     cJSON *root = cJSON_CreateObject();
+        //     cJSON_AddNumberToObject(root, "temp", dht11_data.temperature);
+        //     cJSON_AddNumberToObject(root, "humi", dht11_data.humidity);
+        //
+        //     if (!cJSON_PrintPreallocated(root, json_buf, sizeof(json_buf), 0))
+        //     {
+        //         printf("JSON Print Failed!\r\n");
+        //     }
+        //     cJSON_Delete(root);
             
-            // 发布到 MQTT
-            if(atk_mw8266d_mqtt_pub(MQTT_TOPIC_PUB, json_buf, 0, 0) == ATK_MW8266D_EOK)
-            {
-                printf("MQTT Pub DHT11 OK\r\n");
-            }
-            else
-            {
-                printf("MQTT Pub Failed!\r\n");
-            }
-        }
+        //     // 发布到 MQTT
+        //     if(atk_mw8266d_mqtt_pub(MQTT_TOPIC_PUB, json_buf, 0, 0) == ATK_MW8266D_EOK)
+        //     {
+        //         printf("MQTT Pub DHT11 OK\r\n");
+        //     }
+        //     else
+        //     {
+        //         printf("MQTT Pub Failed!\r\n");
+        //     }
+        // }
 
-        // 发布 AP3216C 数据
+        // 读取 AP3216C 数据
         if (xQueueReceive(xAP3216CQueue, &ap3216c_data, pdMS_TO_TICKS(50)) == pdTRUE)
         {
-            snprintf(json_buf, sizeof(json_buf),
-                     "{\"als\":%d,\"ir\":%d,\"ps\":%d}",
-                     ap3216c_data.als,
-                     ap3216c_data.ir,
-                     ap3216c_data.ps);
+            cJSON *root = cJSON_CreateObject();
+            cJSON_AddNumberToObject(root, "als", ap3216c_data.als);
+            cJSON_AddNumberToObject(root, "ir", ap3216c_data.ir);
+            cJSON_AddNumberToObject(root, "ps", ap3216c_data.ps);
+
+            if (!cJSON_PrintPreallocated(root, json_buf, sizeof(json_buf), 0))
+            {
+                printf("JSON Print Failed!\r\n");
+            }
+            cJSON_Delete(root);
 
             if(atk_mw8266d_mqtt_pub(MQTT_TOPIC_PUB, json_buf, 0, 0) == ATK_MW8266D_EOK)
             {
                 printf("MQTT Pub AP3216C OK\r\n");
-            }
+            } 
             else
             {
                 printf("MQTT Pub Failed!\r\n");
             }
         }
         
-        // 检查是否有接收到的 MQTT 消息 (在非发布期间检查)
-        demo_upload_data(1);
+        // ??????????? MQTT ??? (??? UART ???????)
+        // demo_upload_data(1); // ????????????? data_process_task ??????
+         if (xQueueReceive(xUartRxQueue, &rx_len, portMAX_DELAY) == pdTRUE)
+        {
+            // ?????????????????????????
+            buf = atk_mw8266d_uart_rx_get_frame();
+            if (buf != NULL)
+            {
+
+                // ?????????????????????       (Protocol ID ??)
+                
+                // ??????????????????
+                printf("MsgPump: %s", buf);
+                
+                // ???????????? UART ?????????
+                atk_mw8266d_uart_rx_restart();
+            }
+        }
 
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
 /**
- * @brief       FreeRTOS 运行时间统计任务
- *              打印任务名称、运行时间绝对值、CPU 使用率百分比
+ * @brief       FreeRTOS ????????????
+ *              ????????????????????CPU?????
  */
 void run_time_stats_task(void *pv)
 {
@@ -504,19 +550,27 @@ void run_time_stats_task(void *pv)
 
         printf("TaskName\tAbsTime\t\tTime%%\r\n%s\r\n", pcWriteBuffer);
         
-        // 每 5 秒打印一次
+        // ? 5 ????????
         vTaskDelay(pdMS_TO_TICKS(5000));
+
     }
 }
 
+/**
+ * @brief       ??????????? (????)
+ *              ??????? UART ???????????????????????????
+ */
 
+void data_process_task(void *pv)
+{
+    uint16_t rx_len;
+    uint8_t *buf;
 
+    while (1)
+    {
+        // ???????? UART ????????????? (?????demo_upload_data????)
+       
 
-
-
-
-
-
-
-
-
+        vTaskDelay(pdMS_TO_TICKS(2000));
+    }
+}

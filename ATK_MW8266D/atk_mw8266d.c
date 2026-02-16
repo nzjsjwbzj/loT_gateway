@@ -46,6 +46,7 @@ uint8_t atk_mw8266d_send_at_cmd(char *cmd, char *ack, uint32_t timeout)
 {
     uint8_t *ret = NULL;
     
+
     atk_mw8266d_uart_rx_restart();
     atk_mw8266d_uart_printf("%s\r\n", cmd);
     
@@ -519,6 +520,7 @@ uint8_t atk_mw8266d_mqtt_pub(char *topic, char *data, uint8_t qos, uint8_t retai
     uint8_t *resp;
 	uint32_t timeout;
     // Use RAW mode to avoid escaping issues
+    
     // AT+MQTTPUBRAW=<LinkID>,<"topic">,<len>,<qos>,<retain>
     sprintf(cmd, "AT+MQTTPUBRAW=0,\"%s\",%d,%d,%d", topic, data_len, qos, retain);
     

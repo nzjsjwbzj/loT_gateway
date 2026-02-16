@@ -9,7 +9,7 @@
 //正点原子@ALIENTEK
 //技术论坛:www.openedv.csom
 //修改日期:2015/6/23
-//版本：V1.0
+//胺冢篤1.0
 //版权所有，盗版必究。
 //Copyright(C) 正点原子 2009-2019
 //All rights reserved

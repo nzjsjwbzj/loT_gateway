@@ -75,3 +75,12 @@
 ..\obj\atk_mw8266d_uart.o: ..\SYSTEM\usart\usart.h
 ..\obj\atk_mw8266d_uart.o: E:\solftwares\keil_v5\ARM\ARMCC\Bin\..\include\stdarg.h
 ..\obj\atk_mw8266d_uart.o: E:\solftwares\keil_v5\ARM\ARMCC\Bin\..\include\string.h
+..\obj\atk_mw8266d_uart.o: ..\FreeRTOS\include\FreeRTOS.h
+..\obj\atk_mw8266d_uart.o: E:\solftwares\keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
+..\obj\atk_mw8266d_uart.o: ..\FreeRTOS\include\FreeRTOSConfig.h
+..\obj\atk_mw8266d_uart.o: ..\FreeRTOS\include\projdefs.h
+..\obj\atk_mw8266d_uart.o: ..\FreeRTOS\include\portable.h
+..\obj\atk_mw8266d_uart.o: ..\FreeRTOS\include\deprecated_definitions.h
+..\obj\atk_mw8266d_uart.o: ..\FreeRTOS\portable\RVDS\ARM_CM4F\portmacro.h
+..\obj\atk_mw8266d_uart.o: ..\FreeRTOS\include\mpu_wrappers.h
+..\obj\atk_mw8266d_uart.o: ..\FreeRTOS\include\queue.h

@@ -317,7 +317,7 @@ __asm void prvStartFirstTask( void )
 __asm void prvEnableVFP( void )
 {
 	PRESERVE8
-
+		
 	/* The FPU enable bits are in the CPACR. */
 	ldr.w r0, =0xE000ED88
 	ldr	r1, [r0]
