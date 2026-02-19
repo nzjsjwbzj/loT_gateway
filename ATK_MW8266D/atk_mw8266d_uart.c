@@ -184,7 +184,6 @@ void ATK_MW8266D_UART_IRQHandler(void)
         if (xUartRxQueue != NULL)
         {
             uint16_t len = g_uart_rx_frame.sta.len;
-            g_uart_rx_frame.sta.len=0;
             xQueueSendFromISR(xUartRxQueue, &len, &xHigherPriorityTaskWoken);
         }
 

@@ -86,7 +86,17 @@
 ..\obj\main.o: ..\ATK_MW8266D\atk_mw8266d_uart.h
 ..\obj\main.o: ..\cJSON\Inc\cJSON.h
 ..\obj\main.o: E:\solftwares\keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
+..\obj\main.o: ..\MQTT\MQTTPacket.h
+..\obj\main.o: ..\MQTT\MQTTConnect.h
+..\obj\main.o: ..\MQTT\MQTTPublish.h
+..\obj\main.o: ..\MQTT\MQTTSubscribe.h
+..\obj\main.o: ..\MQTT\MQTTUnsubscribe.h
+..\obj\main.o: ..\MQTT\MQTTFormat.h
+..\obj\main.o: ..\MQTT\StackTrace.h
+..\obj\main.o: ..\MQTT\MQTTPacket.h
+..\obj\main.o: ..\MQTT\transport.h
 ..\obj\main.o: E:\solftwares\keil_v5\ARM\ARMCC\Bin\..\include\stdbool.h
+..\obj\main.o: E:\solftwares\keil_v5\ARM\ARMCC\Bin\..\include\string.h
 ..\obj\main.o: ..\FreeRTOS\include\FreeRTOS.h
 ..\obj\main.o: ..\FreeRTOS\include\FreeRTOSConfig.h
 ..\obj\main.o: ..\FreeRTOS\include\projdefs.h

@@ -60,6 +60,7 @@
                 "e:\\MCU_code\\F429IGT6\\loT_gateway\\FreeRTOS\\portable\\RVDS\\ARM_CM4F",
                 "e:\\MCU_code\\F429IGT6\\loT_gateway\\ATK_MW8266D",
                 "e:\\MCU_code\\F429IGT6\\loT_gateway\\cJSON\\Inc",
+                "e:\\MCU_code\\F429IGT6\\loT_gateway\\MQTT",
                 "e:\\MCU_code\\F429IGT6\\loT_gateway\\HALLIB\\STM32F4xx_HAL_Driver\\Src",
                 "e:\\MCU_code\\F429IGT6\\loT_gateway",
                 "e:\\MCU_code\\F429IGT6\\loT_gateway\\FreeRTOS",

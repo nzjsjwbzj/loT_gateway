@@ -47,6 +47,17 @@
 "..\obj\atk_mw8266d.o"
 "..\obj\atk_mw8266d_uart.o"
 "..\obj\cjson.o"
+"..\obj\mqttconnectclient.o"
+"..\obj\mqttconnectserver.o"
+"..\obj\mqttdeserializepublish.o"
+"..\obj\mqttformat.o"
+"..\obj\mqttpacket.o"
+"..\obj\mqttserializepublish.o"
+"..\obj\mqttsubscribeclient.o"
+"..\obj\mqttsubscribeserver.o"
+"..\obj\mqttunsubscribeclient.o"
+"..\obj\mqttunsubscribeserver.o"
+"..\obj\transport.o"
 --library_type=microlib --strict --scatter "..\OBJ\loT_gataway.sct"
 --summary_stderr --info summarysizes --map --load_addr_map_info --xref --callgraph --symbols
 --info sizes --info totals --info unused --info veneers
