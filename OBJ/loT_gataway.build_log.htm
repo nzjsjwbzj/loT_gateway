@@ -22,12 +22,41 @@ Dialog DLL:      TCM.DLL V1.56.4.0
  
 <h2>Project:</h2>
 E:\MCU_code\F429IGT6\loT_gateway\USER\DHT11.uvprojx
-Project File Date:  02/16/2026
+Project File Date:  02/19/2026
 
 <h2>Output:</h2>
 *** Using Compiler 'V5.06 update 7 (build 960)', folder: 'E:\solftwares\keil_v5\ARM\ARMCC\Bin'
 Build target 'DHT11'
-"..\OBJ\loT_gataway.axf" - 0 Error(s), 0 Warning(s).
+compiling main.c...
+main.c(208): warning:  #111-D: statement is unreachable
+      return 0;
+main.c(320): warning:  #167-D: argument of type "char *" is incompatible with parameter of type "u8 *"
+      LCD_ShowString(30,330,200,16,16, ip_buf);
+main.c(248): warning:  #177-D: variable "link_status"  was declared but never referenced
+      bool  link_status; // WiFi ??????
+main.c(249): warning:  #177-D: variable "con_status"  was declared but never referenced
+      bool  con_status;  // MQTT ??????
+main.c(329): warning:  #177-D: variable "dht11_data"  was declared but never referenced
+      DHT11_Data_t dht11_data; 
+main.c(418): warning:  #177-D: variable "dht11_data"  was declared but never referenced
+      DHT11_Data_t dht11_data;
+main.c(420): warning:  #177-D: variable "link_status"  was declared but never referenced
+      bool link_status;
+main.c(742): warning:  #1-D: last line of file ends without a newline
+  }
+main.c(732): warning:  #177-D: variable "rx_len"  was declared but never referenced
+      uint16_t rx_len;
+main.c(733): warning:  #177-D: variable "buf"  was declared but never referenced
+      uint8_t *buf;
+main.c(60): warning:  #177-D: function "demo_upload_data"  was declared but never referenced
+  static void demo_upload_data(uint8_t is_atkcld)
+main.c(144): warning:  #177-D: variable "mqtt_packet_id"  was declared but never referenced
+  static unsigned short mqtt_packet_id = 1;  // MQTT??ID
+main.c: 12 warnings, 0 errors
+linking...
+Program Size: Code=49224 RO-data=18940 RW-data=288 ZI-data=2100272  
+FromELF: creating hex file...
+"..\OBJ\loT_gataway.axf" - 0 Error(s), 12 Warning(s).
 
 <h2>Software Packages used:</h2>
 
@@ -40,7 +69,7 @@ Package Vendor: Keil
   E:/solftwares/keil_v5/ARM/PACK/Keil/STM32F4xx_DFP/2.17.1/Drivers/CMSIS/Device/ST/STM32F4xx/Include
 
 <h2>Collection of Component Files used:</h2>
-Build Time Elapsed:  00:00:00
+Build Time Elapsed:  00:00:01
 </pre>
 </body>
 </html>

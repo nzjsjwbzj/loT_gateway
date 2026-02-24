@@ -3,7 +3,7 @@
 <title>Static Call Graph - [..\OBJ\loT_gataway.axf]</title></head>
 <body><HR>
 <H1>Static Call Graph for image ..\OBJ\loT_gataway.axf</H1><HR>
-<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060960: Last Updated: Wed Feb 18 16:09:00 2026
+<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 5060960: Last Updated: Wed Feb 25 02:19:16 2026
 <BR><P>
 <H3>Maximum Stack Usage =        864 bytes + Unknown(Cycles, Untraceable Function Pointers)</H3><H3>
 Call chain for Maximum Stack Depth:</H3>
@@ -2080,7 +2080,7 @@ Global Symbols
 <BR><BR>[Called By]<UL><LI><a href="#[8a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;_scanf_really_real
 </UL>
 
-<P><STRONG><a name="[78]"></a>ap3216c_task</STRONG> (Thumb, 40 bytes, Stack size 16 bytes, main.o(i.ap3216c_task))
+<P><STRONG><a name="[78]"></a>ap3216c_task</STRONG> (Thumb, 54 bytes, Stack size 16 bytes, main.o(i.ap3216c_task))
 <BR><BR>[Stack]<UL><LI>Max Depth = 200<LI>Call Chain = ap3216c_task &rArr; xQueueGenericSend &rArr; prvUnlockQueue &rArr; prvNotifyQueueSetContainer &rArr; prvCopyDataToQueue &rArr; xTaskPriorityDisinherit &rArr; __2printf
 </UL>
 <BR>[Calls]<UL><LI><a href="#[144]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;xQueueGenericSend
@@ -2471,7 +2471,7 @@ Global Symbols
 </UL>
 <BR>[Address Reference Count : 1]<UL><LI> entry9a.o(.ARM.Collect$$$$0000000B)
 </UL>
-<P><STRONG><a name="[7a]"></a>net_task</STRONG> (Thumb, 764 bytes, Stack size 448 bytes, main.o(i.net_task))
+<P><STRONG><a name="[7a]"></a>net_task</STRONG> (Thumb, 830 bytes, Stack size 448 bytes, main.o(i.net_task))
 <BR><BR>[Stack]<UL><LI>Max Depth = 864<LI>Call Chain = net_task &rArr; cJSON_PrintPreallocated &rArr; print_value &rArr; print_number &rArr; __0sscanf &rArr; __vfscanf_char &rArr; __vfscanf &rArr; _scanf_real
 </UL>
 <BR>[Calls]<UL><LI><a href="#[16e]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;xQueueGenericReceive
@@ -2571,7 +2571,7 @@ Global Symbols
 </UL>
 <BR>[Address Reference Count : 1]<UL><LI> main.o(i.start_task)
 </UL>
-<P><STRONG><a name="[71]"></a>start_task</STRONG> (Thumb, 222 bytes, Stack size 24 bytes, main.o(i.start_task))
+<P><STRONG><a name="[71]"></a>start_task</STRONG> (Thumb, 234 bytes, Stack size 24 bytes, main.o(i.start_task))
 <BR><BR>[Stack]<UL><LI>Max Depth = 216<LI>Call Chain = start_task &rArr; xQueueCreateMutex &rArr; xQueueGenericSend &rArr; prvUnlockQueue &rArr; prvNotifyQueueSetContainer &rArr; prvCopyDataToQueue &rArr; xTaskPriorityDisinherit &rArr; __2printf
 </UL>
 <BR>[Calls]<UL><LI><a href="#[170]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;xTaskCreate
