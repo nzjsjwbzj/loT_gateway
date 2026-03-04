@@ -46,7 +46,7 @@
 // ??? Broker ????????/??????????????
 #define MQTT_USER_NAME          ""
 #define MQTT_PASSWORD           ""
-// ???????��? Topic?????????????��???????
+// ???????¦·? Topic?????????????õ��????
 #define MQTT_TOPIC_PUB          "user/dev1/data"
 #define MQTT_TOPIC_SUB          "user/dev1/control"
 
@@ -96,6 +96,7 @@ typedef struct{
 #define NET_TASK_PRIO 4
 #define RUN_TIME_STATS_TASK_PRIO 2
 #define DATA_PROCESS_TASK_PRIO 4  // ????????????????
+#define WATCHDOG_TASK_PRIO 6
 
 // ??????????
 #define START_STK_SIZE 128
@@ -106,6 +107,7 @@ typedef struct{
 #define NET_STK_SIZE 500
 #define RUN_TIME_STATS_STK_SIZE 256
 #define DATA_PROCESS_STK_SIZE 256 // ?????????????????
+#define WATCHDOG_STK_SIZE 128
 
 // ??????
 TaskHandle_t StartTask_Handler;
@@ -116,6 +118,7 @@ TaskHandle_t LCDTask_Handler;
 TaskHandle_t NETTask_Handler;
 TaskHandle_t RunTimeStatsTask_Handler;
 TaskHandle_t DataProcessTask_Handler; // ?????????????
+TaskHandle_t WatchdogTask_Handler;
 
 // ????????
 void start_task(void *pv);
@@ -126,6 +129,7 @@ void lcd_task(void *pv);
 void net_task(void *pv);
 void run_time_stats_task(void *pv);
 void data_process_task(void *pv); // ???????????
+void watchdog_task(void *pv);
 
 // ???????
 QueueHandle_t xDHT11Queue;
@@ -144,6 +148,31 @@ static int mqtt_sock = -1;  // MQTT socket ID
 static unsigned short mqtt_packet_id = 1;  // MQTT??ID
 static unsigned char mqtt_send_buf[512];    // MQTT?????????
 static unsigned char mqtt_recv_buf[512];    // MQTT?????????
+
+static IWDG_HandleTypeDef hiwdg;
+static volatile uint32_t wd_expected_mask = 0;
+static volatile uint32_t wd_heartbeat_mask = 0;
+static volatile uint8_t wd_started = 0;
+
+static inline void wd_set_expected(uint32_t mask)
+{
+    taskENTER_CRITICAL();
+    wd_expected_mask |= mask;
+    taskEXIT_CRITICAL();
+}
+
+static inline void wd_heartbeat(uint32_t mask)
+{
+    taskENTER_CRITICAL();
+    wd_heartbeat_mask |= mask;
+    taskEXIT_CRITICAL();
+}
+
+#define WD_BIT_NET   (1U << 0)
+#define WD_BIT_AP    (1U << 1)
+#define WD_BIT_LCD   (1U << 2)
+#define WD_BIT_STAT  (1U << 3)
+#define WD_BIT_DHT   (1U << 4)
 
 TIM_HandleTypeDef htim2;
 
@@ -198,6 +227,8 @@ int main(void)
     LED_Init();                     // ????? LED
     KEY_Init();                     // ?????????
     SDRAM_Init();                   // ????? SDRAM
+	
+	printf("reset\r\n");
 
     // ???????????
     xTaskCreate(start_task,"start_task",START_STK_SIZE,NULL,START_TASK_PRIO,&StartTask_Handler);
@@ -235,6 +266,7 @@ void start_task(void *pv)
     xTaskCreate(lcd_task,    "lcd_task",    LCD_STK_SIZE, NULL, LCD_TASK_PRIO, &LCDTask_Handler);
     xTaskCreate(net_task,    "net_task",    NET_STK_SIZE, NULL, NET_TASK_PRIO, &NETTask_Handler);
     xTaskCreate(run_time_stats_task, "stats_task", RUN_TIME_STATS_STK_SIZE, NULL, RUN_TIME_STATS_TASK_PRIO, &RunTimeStatsTask_Handler);
+   // xTaskCreate(watchdog_task, "watchdog", WATCHDOG_STK_SIZE, NULL, WATCHDOG_TASK_PRIO, &WatchdogTask_Handler);
    // xTaskCreate(data_process_task,   "data_process", DATA_PROCESS_STK_SIZE, NULL, DATA_PROCESS_TASK_PRIO, &DataProcessTask_Handler);
 
     // ??????????
@@ -330,6 +362,9 @@ void dht11_task(void *pv)
     
     while (1)
     {
+        //wd_heartbeat(WD_BIT_DHT);
+			
+			
         // // ??? PCF8574 ??? IO????? DHT11 ????? IO ????
         //  PCF8574_ReadBit(BEEP_IO);
 
@@ -354,6 +389,7 @@ void ap3216c_task(void *pv)
 
     while(1)
     {
+        //wd_heartbeat(WD_BIT_AP);
         // ??? AP3216C ?????????????????
         AP3216C_ReadData(&ap3216c_data.ir,&ap3216c_data.ps,&ap3216c_data.als);
 
@@ -375,6 +411,7 @@ void lcd_task(void *pv)
 
     while(1)
     {
+        //wd_heartbeat(WD_BIT_LCD);
         // ???? DHT11 ?????????? LCD
         if(xQueueReceive(xDHT11Queue,&dht11_data,pdMS_TO_TICKS(100))==pdTRUE){
              if(xSemaphoreTake(xLCDMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
@@ -424,6 +461,15 @@ void net_task(void *pv)
 
     uint16_t rx_len;
     uint8_t *buf;
+    uint32_t backoff_ms = 1000;
+    uint32_t max_backoff_ms = 32000;
+    TickType_t next_retry_tick = 0;
+    uint8_t auto_reconnect = 0;
+    TickType_t last_rx_tick = 0;
+    TickType_t last_ping_tick = 0;
+    TickType_t ping_interval_tick = pdMS_TO_TICKS(20000);
+    TickType_t ping_timeout_tick = pdMS_TO_TICKS(5000);
+    uint8_t waiting_pingresp = 0;
     
     // MQTT???????
     MQTTPacket_connectData connect_data = MQTTPacket_connectData_initializer;
@@ -446,109 +492,17 @@ void net_task(void *pv)
 
     while (1)
     {
+       // wd_heartbeat(WD_BIT_NET);
         key = KEY_Scan(0);
+        TickType_t now = xTaskGetTickCount();
+        uint8_t request_connect = 0;
 
         switch (key)
         {
             case KEY0_PRES: // ????MQTT Broker
+                auto_reconnect = 1;
+                request_connect = 1;
                 printf("Connecting to MQTT Broker...\r\n");
-                
-                // 0. ???????ping
-                atk_mw8266d_ping(MQTT_BROKER_IP);
-
-                // 1. ????TCP??????????????
-                mqtt_sock = transport_open(MQTT_BROKER_IP, atoi(MQTT_BROKER_PORT));
-                if (mqtt_sock < 0)
-                {
-                    printf("Transport Open Failed!\r\n");
-                    con_status = 0;
-                    break;
-                }
-                printf("TCP Connected, Entered Transparent Mode.\r\n");
-                
-                delay_ms(500); // ?????????????
-                
-                // 2. ???MQTT CONNECT??
-                connect_data.MQTTVersion = 4; // MQTT 3.1.1
-                connect_data.clientID.cstring = MQTT_CLIENT_ID;
-                connect_data.keepAliveInterval = 60;
-                connect_data.cleansession = 1;
-                connect_data.willFlag = 0;
-                
-                // ???????????
-                if (strlen(MQTT_USER_NAME) > 0)
-                {
-                    connect_data.username.cstring = MQTT_USER_NAME;
-                }
-                if (strlen(MQTT_PASSWORD) > 0)
-                {
-                    connect_data.password.cstring = MQTT_PASSWORD;
-                }
-                
-                // 3. ????????????CONNECT??
-                len = MQTTSerialize_connect(mqtt_send_buf, sizeof(mqtt_send_buf), &connect_data);
-                if (len <= 0)
-                {
-                    printf("MQTT Connect Serialize Failed!\r\n");
-                    transport_close(mqtt_sock);
-                    mqtt_sock = -1;
-                    con_status = 0;
-                    break;
-                }
-                
-                if (transport_sendPacketBuffer(mqtt_sock, mqtt_send_buf, len) != len)
-                {
-                    printf("MQTT Connect Send Failed!\r\n");
-                    transport_close(mqtt_sock);
-                    mqtt_sock = -1;
-                    con_status = 0;
-                    break;
-                }
-                
-                // 4. ???CONNACK??
-                len = MQTTPacket_read(mqtt_recv_buf, sizeof(mqtt_recv_buf), transport_getdata);
-                if (len > 0)
-                {
-                    if (MQTTDeserialize_connack(&sessionPresent, &connack_rc, mqtt_recv_buf, len))
-                    {
-                        if (connack_rc == MQTT_CONNECTION_ACCEPTED)
-                        {
-                            printf("MQTT Connected!\r\n");
-                            con_status = 1;
-                            
-                            // 5. ????????
-                            subscribe_topic.cstring = MQTT_TOPIC_SUB;
-                            int reqQoS[1] = {0};
-                            len = MQTTSerialize_subscribe(mqtt_send_buf, sizeof(mqtt_send_buf), 0, sub_packetid++, 1, &subscribe_topic, reqQoS);
-                            if (len > 0)
-                            {
-                                transport_sendPacketBuffer(mqtt_sock, mqtt_send_buf, len);
-                                printf("MQTT Subscribe Sent.\r\n");
-                            }
-                        }
-                        else
-                        {
-                            printf("MQTT Connect Rejected: %d\r\n", connack_rc);
-                            transport_close(mqtt_sock);
-                            mqtt_sock = -1;
-                            con_status = 0;
-                        }
-                    }
-                    else
-                    {
-                        printf("MQTT Connack Deserialize Failed!\r\n");
-                        transport_close(mqtt_sock);
-                        mqtt_sock = -1;
-                        con_status = 0;
-                    }
-                }
-                else
-                {
-                    printf("MQTT Connack Receive Timeout!\r\n");
-                    transport_close(mqtt_sock);
-                    mqtt_sock = -1;
-                    con_status = 0;
-                }
                 break;
 
             case KEY1_PRES: // ???MQTT
@@ -567,16 +521,135 @@ void net_task(void *pv)
                     con_status = 0;
                     printf("MQTT Disconnected!\r\n");
                 }
+                auto_reconnect = 1;
+                backoff_ms = 1000;
+                next_retry_tick = now + pdMS_TO_TICKS(1500);
                 break;
 
             default:
                 break;
         }
 
+        //检测未连接就自动退避重连机制
         if (!con_status || mqtt_sock < 0)
         {
-            vTaskDelay(pdMS_TO_TICKS(200));
-            continue;
+            uint8_t can_try = request_connect;
+            if (!can_try && auto_reconnect)
+            {
+                //to avoid error ,implement delay
+                //this is for automatic reconnection
+                if (next_retry_tick == 0 || now >= next_retry_tick)
+                {
+                    can_try = 1;
+                }
+            }
+            if (can_try)
+            {
+                if (atk_mw8266d_get_ip(ip_buf) != ATK_MW8266D_EOK)
+                {
+                    atk_mw8266d_join_ap(DEMO_WIFI_SSID, DEMO_WIFI_PWD);
+                }
+                atk_mw8266d_uart_rx_restart();
+                mqtt_sock = transport_open(MQTT_BROKER_IP, atoi(MQTT_BROKER_PORT));
+                if (mqtt_sock < 0)
+                {
+                    printf("Transport Open Failed!\r\n");
+                    con_status = 0;
+                }
+                else
+                {
+                    printf("TCP Connected, Entered Transparent Mode.\r\n");
+                    delay_ms(500);
+                    connect_data.MQTTVersion = 4;
+                    connect_data.clientID.cstring = MQTT_CLIENT_ID;
+                    connect_data.keepAliveInterval = 60;
+                    connect_data.cleansession = 1;
+                    connect_data.willFlag = 0;
+                    if (strlen(MQTT_USER_NAME) > 0) connect_data.username.cstring = MQTT_USER_NAME;
+                    if (strlen(MQTT_PASSWORD) > 0) connect_data.password.cstring = MQTT_PASSWORD;
+                    len = MQTTSerialize_connect(mqtt_send_buf, sizeof(mqtt_send_buf), &connect_data);
+                    if (len <= 0 || transport_sendPacketBuffer(mqtt_sock, mqtt_send_buf, len) != len)
+                    {
+                        transport_close(mqtt_sock);
+                        mqtt_sock = -1;
+                        con_status = 0;
+                    }
+                    else
+                    {
+                        len = MQTTPacket_read(mqtt_recv_buf, sizeof(mqtt_recv_buf), transport_getdata);
+                        if (len > 0 && MQTTDeserialize_connack(&sessionPresent, &connack_rc, mqtt_recv_buf, len)
+                            && connack_rc == MQTT_CONNECTION_ACCEPTED)
+                        {
+                            printf("MQTT Connected!\r\n");
+                            con_status = 1;
+                            backoff_ms = 1000;
+                            next_retry_tick = 0;
+                            last_rx_tick = now;
+                            last_ping_tick = now;
+                            waiting_pingresp = 0;
+                            subscribe_topic.cstring = MQTT_TOPIC_SUB;
+                            int reqQoS[1] = {0};
+                            len = MQTTSerialize_subscribe(mqtt_send_buf, sizeof(mqtt_send_buf), 0, sub_packetid++, 1, &subscribe_topic, reqQoS);
+                            if (len > 0)
+                            {
+                                transport_sendPacketBuffer(mqtt_sock, mqtt_send_buf, len);
+                                printf("MQTT Subscribe Sent.\r\n");
+                            }
+                        }
+                        else
+                        {
+                            transport_close(mqtt_sock);
+                            mqtt_sock = -1;
+                            con_status = 0;
+                        }
+                    }
+                }
+                if (!con_status && auto_reconnect)
+                {
+                    if (backoff_ms < max_backoff_ms) backoff_ms <<= 1;
+                    if (backoff_ms > max_backoff_ms) backoff_ms = max_backoff_ms;
+                    next_retry_tick = now + pdMS_TO_TICKS(backoff_ms);
+                }
+            }
+            if (!con_status)
+            {
+                vTaskDelay(pdMS_TO_TICKS(10));
+                continue;
+            }
+        }
+
+
+        //心跳机制，看看是不是真的活着。更新状态
+        if (con_status && mqtt_sock >= 0)
+        {
+            if (waiting_pingresp)
+            {
+                if ((now - last_ping_tick) > ping_timeout_tick)
+                {
+                    printf("MQTT Ping Timeout!\r\n");
+                    transport_close(mqtt_sock);
+                    mqtt_sock = -1;
+                    con_status = 0;
+                    waiting_pingresp = 0;
+                }
+            }
+            else if ((now - last_rx_tick) > ping_interval_tick)
+            {
+                len = MQTTSerialize_pingreq(mqtt_send_buf, sizeof(mqtt_send_buf));
+                if (len > 0 && transport_sendPacketBuffer(mqtt_sock, mqtt_send_buf, len) == len)
+                {
+                    waiting_pingresp = 1;
+                    last_ping_tick = now;
+                }
+                else
+                {
+                    printf("MQTT Ping Send Failed!\r\n");
+                    transport_close(mqtt_sock);
+                    mqtt_sock = -1;
+                    con_status = 0;
+                    waiting_pingresp = 0;
+                }
+            }
         }
 
         // ??? AP3216C ??????????? MQTT
@@ -602,13 +675,20 @@ void net_task(void *pv)
 
             if (len > 0)
             {
-                if (transport_sendPacketBuffer(mqtt_sock, mqtt_send_buf, len) == len)
+                int sret = transport_sendPacketBuffer(mqtt_sock, mqtt_send_buf, len);
+                if (sret == len)
                 {
                     printf("MQTT Pub AP3216C OK\r\n");
                 }
                 else
                 {
                     printf("MQTT Pub Send Failed!\r\n");
+                    if (con_status)
+                    {
+                        transport_close(mqtt_sock);
+                        mqtt_sock = -1;
+                        con_status = 0;
+                    }
                 }
             }
             else
@@ -621,6 +701,7 @@ void net_task(void *pv)
         len = transport_getdatanb(NULL, mqtt_recv_buf, sizeof(mqtt_recv_buf));
         if (len > 0)
         {
+            last_rx_tick = now;
             int offset = 0;
             while (offset < len)
             {
@@ -673,7 +754,8 @@ void net_task(void *pv)
                 {
                     uint8_t pkt_type = curr_buf[0] >> 4;
                     if (pkt_type == 13) { // PINGRESP
-                         // Ping ???
+                         waiting_pingresp = 0;
+                         last_rx_tick = now;
                     } else if (pkt_type == 9) { // SUBACK
                          printf("MQTT SUBACK Received\r\n");
                     } else {
@@ -711,6 +793,7 @@ void run_time_stats_task(void *pv)
     
     while (1)
     {
+       // wd_heartbeat(WD_BIT_STAT);
         
         vTaskGetRunTimeStats(pcWriteBuffer);
 
@@ -719,6 +802,38 @@ void run_time_stats_task(void *pv)
         // ? 5 ???????
         vTaskDelay(pdMS_TO_TICKS(5000));
 
+    }
+}
+
+void watchdog_task(void *pv)
+{
+    vTaskDelay(pdMS_TO_TICKS(5000));
+    wd_set_expected(WD_BIT_NET | WD_BIT_AP | WD_BIT_LCD | WD_BIT_STAT | WD_BIT_DHT);
+    hiwdg.Instance = IWDG;
+    hiwdg.Init.Prescaler = IWDG_PRESCALER_64;
+    hiwdg.Init.Reload = 2000;
+    HAL_IWDG_Init(&hiwdg);
+    HAL_IWDG_Start(&hiwdg);
+    wd_started = 1;
+    int miss = 0;
+    while (1)
+    {
+        uint32_t mask = wd_heartbeat_mask;
+        if ((mask & wd_expected_mask) == wd_expected_mask)
+        {
+            HAL_IWDG_Refresh(&hiwdg);
+            wd_heartbeat_mask = 0;
+            miss = 0;
+        }
+        else
+        {
+            miss++;
+            if (miss >= 6)
+            {
+                while (1) { vTaskDelay(pdMS_TO_TICKS(1000)); }
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
 

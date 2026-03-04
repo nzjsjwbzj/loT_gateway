@@ -115,6 +115,7 @@ typedef struct
 	MQTTString password;
 } MQTTPacket_connectData;
 
+
 typedef union
 {
 	unsigned char all;	/**< all connack flags */

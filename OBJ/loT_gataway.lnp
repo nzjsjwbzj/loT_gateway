@@ -24,6 +24,8 @@
 "..\obj\stm32f4xx_hal_dma2d.o"
 "..\obj\stm32f4xx_hal_spi.o"
 "..\obj\stm32f4xx_hal_can.o"
+"..\obj\stm32f4xx_hal_iwdg.o"
+"..\obj\stm32f4xx_hal_wwdg.o"
 "..\obj\delay.o"
 "..\obj\sys.o"
 "..\obj\usart.o"

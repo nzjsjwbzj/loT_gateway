@@ -389,7 +389,11 @@ uint8_t atk_mw8266d_enter_unvarnished(void)
  */
 void atk_mw8266d_exit_unvarnished(void)
 {
+    delay_ms(1000);
     atk_mw8266d_uart_printf("+++");
+    delay_ms(1000);
+    atk_mw8266d_uart_rx_restart();
+    atk_mw8266d_send_at_cmd("AT", "OK", 500);
 }
 
 /**
