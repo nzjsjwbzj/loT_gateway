@@ -29,7 +29,8 @@
                 "e:\\MCU_code\\F429IGT6\\loT_gateway\\FreeRTOS",
                 "E:/MCU_code/F429IGT6/loT_gateway/ATK_MW8266D",
                 "E:/MCU_code/F429IGT6/loT_gateway/cJSON/Inc",
-                "E:/MCU_code/F429IGT6/loT_gateway/MQTT"
+                "E:/MCU_code/F429IGT6/loT_gateway/MQTT",
+                "E:/MCU_code/F429IGT6/loT_gateway/HARDWARE/W25Q256"
             ],
             "compilerPath": "C:/Qt/Tools/mingw1310_64/bin/gcc.exe",
             "cStandard": "${default}",
@@ -63,6 +64,8 @@
                 "e:\\MCU_code\\F429IGT6\\loT_gateway\\ATK_MW8266D",
                 "e:\\MCU_code\\F429IGT6\\loT_gateway\\cJSON\\Inc",
                 "e:\\MCU_code\\F429IGT6\\loT_gateway\\MQTT",
+                "e:\\MCU_code\\F429IGT6\\loT_gateway\\HARDWARE\\SPI",
+                "e:\\MCU_code\\F429IGT6\\loT_gateway\\HARDWARE\\W25QXX",
                 "E:\\solftwares\\keil_v5\\ARM\\ARMCC\\include",
                 "E:\\solftwares\\keil_v5\\ARM\\ARMCC\\include\\arm_linux",
                 "E:\\solftwares\\keil_v5\\ARM\\ARMCC\\include\\arm_linux_compat",

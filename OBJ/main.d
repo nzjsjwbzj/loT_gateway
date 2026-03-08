@@ -86,6 +86,7 @@
 ..\obj\main.o: ..\ATK_MW8266D\atk_mw8266d_uart.h
 ..\obj\main.o: ..\cJSON\Inc\cJSON.h
 ..\obj\main.o: E:\solftwares\keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
+..\obj\main.o: ..\HARDWARE\W25QXX\w25qxx.h
 ..\obj\main.o: ..\MQTT\MQTTPacket.h
 ..\obj\main.o: ..\MQTT\MQTTConnect.h
 ..\obj\main.o: ..\MQTT\MQTTPublish.h

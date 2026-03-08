@@ -11,6 +11,7 @@
 #include "atk_mw8266d.h"
 #include "atk_mw8266d_uart.h"
 #include "cJSON.h"
+#include "w25qxx.h"
 
 // MQTT???????
 #include "MQTTPacket.h"
@@ -32,15 +33,15 @@
  ???????: www.openedv.com
  ????????: ALIENTEK
 ************************************************/
-#define DEMO_WIFI_SSID          "CMCC-X22b"
-#define DEMO_WIFI_PWD           "gp24ghzf"
+#define DEMO_WIFI_SSID          "ari"
+#define DEMO_WIFI_PWD           "zhanglanxiong"
 #define DEMO_ATKCLD_DEV_ID      "63152966615081879519"
 #define DEMO_ATKCLD_DEV_PWD     "12345678"
 
 // MQTT ??????????
 // #define MQTT_BROKER_IP          "broker.emqx.io"
 // ????????? Broker???? Mosquitto???????????? 1883
-#define MQTT_BROKER_IP          "192.168.1.28"
+#define MQTT_BROKER_IP          "192.168.87.199"
 #define MQTT_BROKER_PORT        "1883"
 #define MQTT_CLIENT_ID          "STM32_F429_Client_Test"
 // ??? Broker ????????/??????????????
@@ -100,9 +101,9 @@ typedef struct{
 
 // ??????????
 #define START_STK_SIZE 128
-#define INIT_STK_SIZE 128
+#define INIT_STK_SIZE 256
 #define DHT11_STK_SIZE 128
-#define AP3216C_STK_SIZE 128
+#define AP3216C_STK_SIZE 256
 #define LCD_STK_SIZE 128
 #define NET_STK_SIZE 500
 #define RUN_TIME_STATS_STK_SIZE 256
@@ -137,17 +138,282 @@ QueueHandle_t xAP3216CQueue;
 QueueHandle_t xAP3216CQueueForMQTT; // MQTT??????
 QueueHandle_t xUartRxQueue; // UART ???????????
 SemaphoreHandle_t xLCDMutex;
+SemaphoreHandle_t xFlashMutex;
 
 u8 ret;
 char ip_buf[16];
 bool  link_status; // WiFi ??????
 bool  con_status;  // MQTT ??????
+volatile uint8_t g_mqtt_connected = 0;
 
 // MQTT??????
 static int mqtt_sock = -1;  // MQTT socket ID
 static unsigned short mqtt_packet_id = 1;  // MQTT??ID
 static unsigned char mqtt_send_buf[512];    // MQTT?????????
 static unsigned char mqtt_recv_buf[512];    // MQTT?????????
+
+typedef struct
+{
+    uint8_t flag;
+    uint16_t len;
+    char data[253];
+} FlashRecord;
+
+#define FLASH_DATA_START      0x00100000
+#define FLASH_DATA_SIZE       (1024 * 1024)
+#define FLASH_SECTOR_SIZE     4096
+#define FLASH_RECORD_SIZE     256
+#define FLASH_RECORD_COUNT    (FLASH_DATA_SIZE / FLASH_RECORD_SIZE)
+#define FLASH_RECORDS_PER_SECTOR (FLASH_SECTOR_SIZE / FLASH_RECORD_SIZE)
+#define FLASH_FLAG_EMPTY      0xFF
+#define FLASH_FLAG_VALID      0xA5
+#define FLASH_FLAG_SENT       0x00
+
+static uint32_t flash_read_index = 0;
+static uint32_t flash_write_index = 0;
+static uint32_t flash_valid_count = 0;
+static uint8_t flash_ready = 0;
+
+static uint32_t flash_record_addr(uint32_t index)
+{
+    return FLASH_DATA_START + (index * FLASH_RECORD_SIZE);
+}
+
+static void flash_store_rescan(void)
+{
+    uint8_t flag = 0;
+    uint32_t first_empty = 0xFFFFFFFF;
+    uint32_t first_valid = 0xFFFFFFFF;
+    uint32_t valid_count = 0;  // 临时变量，先计算有多少条有效数据
+    
+    // ✅ 第一遍扫描：统计有效数据和找关键位置
+    for (uint32_t i = 0; i < FLASH_RECORD_COUNT; i++)
+    {
+        W25QXX_Read(&flag, flash_record_addr(i), 1);
+        if (flag == FLASH_FLAG_VALID)
+        {
+            valid_count++;
+            if (first_valid == 0xFFFFFFFF) first_valid = i;
+        }
+        if ((flag == FLASH_FLAG_EMPTY || flag == FLASH_FLAG_SENT) && first_empty == 0xFFFFFFFF)
+        {
+            first_empty = i;
+        }
+    }
+    
+    flash_valid_count = valid_count;  // 设置最终的计数
+    
+    if (first_valid == 0xFFFFFFFF)
+    {
+        // 没有有效数据，Flash 是空的或全是已发送标记
+        flash_read_index = (first_empty == 0xFFFFFFFF) ? 0 : first_empty;
+        flash_write_index = flash_read_index;
+        printf("DEBUG flash_store_rescan: EMPTY (first_empty=%lu)\r\n", first_empty);
+    }
+    else
+    {
+        // 有有效数据
+        flash_read_index = first_valid;  // ✅ 指向第一条有效数据
+        flash_write_index = (first_empty == 0xFFFFFFFF) ? first_valid : first_empty;
+        printf("DEBUG flash_store_rescan: first_valid=%lu, first_empty=%lu, valid_count=%lu\r\n",
+               first_valid, first_empty, valid_count);
+    }
+}
+
+// ✅ 新增：Flash 格式化函数
+static void flash_store_format(void)
+{
+    if (!flash_ready) return;
+    
+    printf("DEBUG: Formatting Flash (erasing all sectors)...\r\n");
+    
+    // 擦除所有扇区
+    for (uint32_t sector = 0; sector < (FLASH_DATA_SIZE / FLASH_SECTOR_SIZE); sector++)
+    {
+        uint32_t addr = FLASH_DATA_START + sector * FLASH_SECTOR_SIZE;
+        W25QXX_Erase_Sector((addr - FLASH_DATA_START) / FLASH_SECTOR_SIZE);
+        
+        if ((sector + 1) % 64 == 0)
+        {
+            printf("  Erased %lu sectors...\r\n", sector + 1);
+        }
+    }
+    
+    printf("DEBUG: Flash format complete!\r\n");
+    
+    // 重置指针
+    flash_read_index = 0;
+    flash_write_index = 0;
+    flash_valid_count = 0;
+}
+
+static void flash_store_init(void)
+{
+    if (!flash_ready)
+    {
+        flash_read_index = 0;
+        flash_write_index = 0;
+        flash_valid_count = 0;
+        return;
+    }
+    
+    // ✅ 新增：检查 Flash 第一个位置的标志
+    // 如果全是垃圾数据（混合 0x00 和 0xA5），则格式化
+    uint8_t first_flag = 0xFF;
+    W25QXX_Read(&first_flag, FLASH_DATA_START, 1);
+    
+    // ✅ 检查：如果第一个位置既不是 0xFF（空），也不是 0xA5（有效），也不是 0x00（已发送）
+    // 或者整个 Flash 看起来很混乱，则格式化
+    if (first_flag != FLASH_FLAG_EMPTY && first_flag != FLASH_FLAG_VALID && first_flag != FLASH_FLAG_SENT)
+    {
+        printf("DEBUG: Flash appears corrupted (first_flag=0x%02X), formatting...\r\n", first_flag);
+        flash_store_format();
+        return;
+    }
+    
+    flash_store_rescan();
+    printf("Flash Init Done: read_idx=%lu, write_idx=%lu, valid_count=%lu\r\n",
+           flash_read_index, flash_write_index, flash_valid_count);
+}
+
+static void flash_store_erase_sector(uint32_t index)
+{
+    if (!flash_ready) return;
+    uint32_t sector_index = (index / FLASH_RECORDS_PER_SECTOR);
+    uint32_t sector_addr = FLASH_DATA_START + sector_index * FLASH_SECTOR_SIZE;
+    W25QXX_Erase_Sector((sector_addr - FLASH_DATA_START) / FLASH_SECTOR_SIZE);
+}
+
+static void flash_store_push(const char *data, uint16_t len)
+{
+    if (!flash_ready) return;
+    
+    uint8_t flag = 0;
+    uint32_t addr = 0;
+    uint32_t empty_idx = 0xFFFFFFFF;
+    for (uint32_t i = 0; i < FLASH_RECORD_COUNT; i++)
+    {
+        uint32_t idx = (flash_write_index + i) % FLASH_RECORD_COUNT;
+        W25QXX_Read(&flag, flash_record_addr(idx), 1);
+        if (flag == FLASH_FLAG_EMPTY || flag == FLASH_FLAG_SENT)
+        {
+            empty_idx = idx;
+            break;
+        }
+    }
+
+    if (empty_idx != 0xFFFFFFFF)
+    {
+        flash_write_index = empty_idx;
+    }
+    else
+    {
+        uint32_t sector_start = (flash_write_index / FLASH_RECORDS_PER_SECTOR) * FLASH_RECORDS_PER_SECTOR;
+        uint32_t sector_end = sector_start + FLASH_RECORDS_PER_SECTOR;
+
+        flash_store_erase_sector(flash_write_index);
+
+        if (flash_read_index >= sector_start && flash_read_index < sector_end)
+        {
+            flash_store_rescan();
+        }
+        flash_write_index = sector_start;
+    }
+
+    addr = flash_record_addr(flash_write_index);
+    if (len > sizeof(((FlashRecord *)0)->data)) len = sizeof(((FlashRecord *)0)->data);
+    uint8_t buf[FLASH_RECORD_SIZE];
+    memset(buf, 0xFF, sizeof(buf));
+    buf[0] = FLASH_FLAG_VALID;
+    buf[1] = (uint8_t)(len & 0xFF);
+    buf[2] = (uint8_t)((len >> 8) & 0xFF);
+    memcpy(&buf[3], data, len);
+    W25QXX_Write(buf, addr, FLASH_RECORD_SIZE);
+    
+    flash_write_index = (flash_write_index + 1) % FLASH_RECORD_COUNT;
+    if (flash_valid_count < FLASH_RECORD_COUNT) flash_valid_count++;
+}
+
+static int flash_store_peek(char *out, uint16_t max_len, uint16_t *out_len, uint32_t *out_index)
+{
+    if (!flash_ready) return 0;
+    if (flash_valid_count == 0) return 0;
+    
+    uint8_t flag = 0;
+    uint32_t start = flash_read_index;
+    uint32_t idx = flash_read_index;
+    for (uint32_t i = 0; i < FLASH_RECORD_COUNT; i++)
+    {
+        uint32_t addr = flash_record_addr(idx);
+        W25QXX_Read(&flag, addr, 1);
+        if (flag == FLASH_FLAG_VALID)
+        {
+            uint8_t len_bytes[2];
+            W25QXX_Read(len_bytes, addr + 1, 2);
+            uint16_t len = (uint16_t)(len_bytes[0] | (len_bytes[1] << 8));
+            if (len >= max_len) len = max_len - 1;
+            W25QXX_Read((uint8_t *)out, addr + 3, len);
+            out[len] = '\0';
+            *out_len = len;
+            *out_index = idx;
+            return 1;
+        }
+        idx = (idx + 1) % FLASH_RECORD_COUNT;
+        if (idx == start)
+        {
+            break;
+        }
+    }
+    flash_store_rescan();
+    return 0;
+}
+
+static void flash_store_mark_sent(uint32_t index)
+{
+    if (!flash_ready) return;
+    uint8_t sent_flag = FLASH_FLAG_SENT;
+    W25QXX_Write(&sent_flag, flash_record_addr(index), 1);
+    if (flash_valid_count > 0) flash_valid_count--;
+    flash_read_index = (index + 1) % FLASH_RECORD_COUNT;
+}
+
+static void flash_store_push_locked(const char *data, uint16_t len)
+{
+    if (xFlashMutex && xSemaphoreTake(xFlashMutex, pdMS_TO_TICKS(200)) == pdTRUE)
+    {
+        flash_store_push(data, len);
+        xSemaphoreGive(xFlashMutex);
+    }
+    else
+    {
+        flash_store_push(data, len);
+    }
+}
+
+static int flash_store_peek_locked(char *out, uint16_t max_len, uint16_t *out_len, uint32_t *out_index)
+{
+    int ret = 0;
+    if (xFlashMutex && xSemaphoreTake(xFlashMutex, pdMS_TO_TICKS(200)) == pdTRUE)
+    {
+        ret = flash_store_peek(out, max_len, out_len, out_index);
+        xSemaphoreGive(xFlashMutex);
+        return ret;
+    }
+    return flash_store_peek(out, max_len, out_len, out_index);
+}
+
+static void flash_store_mark_sent_locked(uint32_t index)
+{
+    if (xFlashMutex && xSemaphoreTake(xFlashMutex, pdMS_TO_TICKS(200)) == pdTRUE)
+    {
+        flash_store_mark_sent(index);
+        xSemaphoreGive(xFlashMutex);
+    }
+    else
+    {
+        flash_store_mark_sent(index);
+    }
+}
 
 static IWDG_HandleTypeDef hiwdg;
 static volatile uint32_t wd_expected_mask = 0;
@@ -247,6 +513,7 @@ void start_task(void *pv)
     xAP3216CQueueForMQTT = xQueueCreate(5, sizeof(AP3216C_Data_t)); // ???? MQTT ??????
     xUartRxQueue = xQueueCreate(10, sizeof(uint16_t)); // UART ???????
     xLCDMutex = xSemaphoreCreateMutex();
+    xFlashMutex = xSemaphoreCreateMutex();
 
     cJSON_Hooks hooks;
     hooks.malloc_fn = pvPortMalloc;
@@ -254,7 +521,7 @@ void start_task(void *pv)
     cJSON_InitHooks(&hooks);
 
     // ???????????
-    if (xDHT11Queue == NULL || xAP3216CQueue == NULL || xLCDMutex == NULL || xUartRxQueue == NULL) {
+    if (xDHT11Queue == NULL || xAP3216CQueue == NULL || xLCDMutex == NULL || xUartRxQueue == NULL || xFlashMutex == NULL) {
         printf("????/????????????\r\n");
         // ???????????????????
     }
@@ -278,10 +545,19 @@ void init_task(void *pv)
     u8 ret;
     char ip_buf[16];
     bool  link_status; // WiFi ??????
-    bool  con_status;  // MQTT ??????
+    // ✅ 删除：bool con_status;  (这是全局变量，不应该在这里重新声明！)
 
     LCD_Init();                     // LCD ?????
     PCF8574_Init();                 // PCF8574 ???IO?????
+
+    W25QXX_Init();
+    uint16_t flash_id = W25QXX_ReadID();
+    printf("W25Q ID: 0x%04X\r\n", flash_id);
+    if (flash_id == W25Q256 || flash_id == W25Q128 || flash_id == W25Q64)
+    {
+        flash_ready = 1;
+    }
+    flash_store_init();
 
     // ??? PCF8574 ???IO ?????????DHT11 ????????
     PCF8574_ReadBit(BEEP_IO);
@@ -386,6 +662,7 @@ void dht11_task(void *pv)
 void ap3216c_task(void *pv)
 {
     AP3216C_Data_t ap3216c_data;
+    char json_buf[96];
 
     while(1)
     {
@@ -393,11 +670,20 @@ void ap3216c_task(void *pv)
         // ??? AP3216C ?????????????????
         AP3216C_ReadData(&ap3216c_data.ir,&ap3216c_data.ps,&ap3216c_data.als);
 
-        // ????? LCD ????
+        // ✅ 修复：只发送给两个队列，不在这里存 Flash
+        // LCD ?????
         xQueueSend(xAP3216CQueue,&ap3216c_data,0);
-        // ????? MQTT ???? (??? MQTT ????????????????????????????)
-        if (xAP3216CQueueForMQTT != NULL) {
-            xQueueSend(xAP3216CQueueForMQTT, &ap3216c_data, 0);
+        
+        // MQTT ????
+        BaseType_t qret = xQueueSend(xAP3216CQueueForMQTT, &ap3216c_data, 0);
+        if (!g_mqtt_connected || qret != pdTRUE)
+        {
+            int n = snprintf(json_buf, sizeof(json_buf), "{\"als\":%u,\"ir\":%u,\"ps\":%u}",
+                             ap3216c_data.als, ap3216c_data.ir, ap3216c_data.ps);
+            if (n > 0 && n < (int)sizeof(json_buf))
+            {
+                flash_store_push_locked(json_buf, (uint16_t)n);
+            }
         }
 
         vTaskDelay(pdMS_TO_TICKS(2000)); // ??? 2 ??
@@ -455,7 +741,6 @@ void net_task(void *pv)
     DHT11_Data_t dht11_data;
     AP3216C_Data_t ap3216c_data;
     bool link_status;
-    bool con_status = 0;
     u8 key;
     char json_buf[256];
 
@@ -467,9 +752,14 @@ void net_task(void *pv)
     uint8_t auto_reconnect = 0;
     TickType_t last_rx_tick = 0;
     TickType_t last_ping_tick = 0;
-    TickType_t ping_interval_tick = pdMS_TO_TICKS(20000);
-    TickType_t ping_timeout_tick = pdMS_TO_TICKS(5000);
+    TickType_t ping_interval_tick = pdMS_TO_TICKS(5000);
+    TickType_t ping_timeout_tick = pdMS_TO_TICKS(2000);
     uint8_t waiting_pingresp = 0;
+    uint32_t cached_total = 0;
+    uint32_t sent_total = 0;
+    TickType_t last_report_tick = 0;
+    uint8_t wifi_rejoin_needed = 0;
+    TickType_t wifi_retry_tick = 0;
     
     // MQTT???????
     MQTTPacket_connectData connect_data = MQTTPacket_connectData_initializer;
@@ -496,6 +786,13 @@ void net_task(void *pv)
         key = KEY_Scan(0);
         TickType_t now = xTaskGetTickCount();
         uint8_t request_connect = 0;
+
+        if ((now - last_report_tick) > pdMS_TO_TICKS(5000))
+        {
+            printf("cache_total=%lu, sent_total=%lu, pending=%lu\r\n",
+                   cached_total, sent_total, (uint32_t)flash_valid_count);
+            last_report_tick = now;
+        }
 
         switch (key)
         {
@@ -533,6 +830,7 @@ void net_task(void *pv)
         //检测未连接就自动退避重连机制
         if (!con_status || mqtt_sock < 0)
         {
+            g_mqtt_connected = 0;
             uint8_t can_try = request_connect;
             if (!can_try && auto_reconnect)
             {
@@ -545,9 +843,31 @@ void net_task(void *pv)
             }
             if (can_try)
             {
+                if (wifi_rejoin_needed && (wifi_retry_tick == 0 || now >= wifi_retry_tick))
+                {
+                    uint8_t join_ret = atk_mw8266d_join_ap(DEMO_WIFI_SSID, DEMO_WIFI_PWD);
+                    if (join_ret == ATK_MW8266D_EOK)
+                    {
+                        wifi_rejoin_needed = 0;
+                        wifi_retry_tick = 0;
+                    }
+                    else
+                    {
+                        wifi_retry_tick = now + pdMS_TO_TICKS(5000);
+                        vTaskDelay(pdMS_TO_TICKS(10));
+                        continue;
+                    }
+                }
                 if (atk_mw8266d_get_ip(ip_buf) != ATK_MW8266D_EOK)
                 {
-                    atk_mw8266d_join_ap(DEMO_WIFI_SSID, DEMO_WIFI_PWD);
+                    uint8_t join_ret = atk_mw8266d_join_ap(DEMO_WIFI_SSID, DEMO_WIFI_PWD);
+                    if (join_ret != ATK_MW8266D_EOK)
+                    {
+                        wifi_rejoin_needed = 1;
+                        wifi_retry_tick = now + pdMS_TO_TICKS(5000);
+                        vTaskDelay(pdMS_TO_TICKS(10));
+                        continue;
+                    }
                 }
                 atk_mw8266d_uart_rx_restart();
                 mqtt_sock = transport_open(MQTT_BROKER_IP, atoi(MQTT_BROKER_PORT));
@@ -555,6 +875,8 @@ void net_task(void *pv)
                 {
                     printf("Transport Open Failed!\r\n");
                     con_status = 0;
+                    wifi_rejoin_needed = 1;
+                    wifi_retry_tick = now + pdMS_TO_TICKS(5000);
                 }
                 else
                 {
@@ -582,6 +904,7 @@ void net_task(void *pv)
                         {
                             printf("MQTT Connected!\r\n");
                             con_status = 1;
+                            g_mqtt_connected = 1;
                             backoff_ms = 1000;
                             next_retry_tick = 0;
                             last_rx_tick = now;
@@ -601,6 +924,7 @@ void net_task(void *pv)
                             transport_close(mqtt_sock);
                             mqtt_sock = -1;
                             con_status = 0;
+                            g_mqtt_connected = 0;
                         }
                     }
                 }
@@ -611,10 +935,64 @@ void net_task(void *pv)
                     next_retry_tick = now + pdMS_TO_TICKS(backoff_ms);
                 }
             }
+
+
+
             if (!con_status)
             {
+                // ✅ 修复：网络断开时存储数据到 Flash
+                while (xQueueReceive(xAP3216CQueueForMQTT, &ap3216c_data, 0) == pdTRUE)
+                {
+                    cJSON *root = cJSON_CreateObject();
+                    cJSON_AddNumberToObject(root, "als", ap3216c_data.als);
+                    cJSON_AddNumberToObject(root, "ir", ap3216c_data.ir);
+                    cJSON_AddNumberToObject(root, "ps", ap3216c_data.ps);
+                    if (cJSON_PrintPreallocated(root, json_buf, sizeof(json_buf), 0))
+                    {
+                        flash_store_push_locked(json_buf, (uint16_t)strlen(json_buf));
+                        cached_total++;
+                        printf("Data Stored to Flash! (cached=%lu, pending=%lu)\r\n", 
+                               cached_total, flash_valid_count);
+                    }
+                    cJSON_Delete(root);
+                }
                 vTaskDelay(pdMS_TO_TICKS(10));
                 continue;
+            }
+        }
+
+        if (flash_valid_count > 0)
+        {
+            uint16_t cached_len = 0;
+            uint32_t rec_index = 0;
+            if (flash_store_peek_locked(json_buf, sizeof(json_buf), &cached_len, &rec_index))
+            {
+                printf("Read from Flash: len=%d, pending=%lu\r\n", 
+                       cached_len, flash_valid_count);
+                       
+                MQTTString pubTopicString = MQTTString_initializer;
+                pubTopicString.cstring = MQTT_TOPIC_PUB;
+                len = MQTTSerialize_publish(mqtt_send_buf, sizeof(mqtt_send_buf), 0, 0, 0, 0,
+                                            pubTopicString, (unsigned char*)json_buf, cached_len);
+                if (len > 0)
+                {
+                    if (transport_sendPacketBuffer(mqtt_sock, mqtt_send_buf, len) == len)
+                    {
+                        printf("Flash Data Sent OK (pending=%lu)\r\n", flash_valid_count);
+                        flash_store_mark_sent_locked(rec_index);
+                        sent_total++;
+                    }
+                    else
+                    {
+                        printf("Send Flash Data Failed!\r\n");
+                        transport_close(mqtt_sock);
+                        mqtt_sock = -1;
+                        con_status = 0;
+                        g_mqtt_connected = 0;
+                        vTaskDelay(pdMS_TO_TICKS(10));
+                        continue;
+                    }
+                }
             }
         }
 
@@ -631,6 +1009,9 @@ void net_task(void *pv)
                     mqtt_sock = -1;
                     con_status = 0;
                     waiting_pingresp = 0;
+                    g_mqtt_connected = 0;
+                    wifi_rejoin_needed = 1;
+                    wifi_retry_tick = now + pdMS_TO_TICKS(5000);
                 }
             }
             else if ((now - last_rx_tick) > ping_interval_tick)
@@ -648,6 +1029,9 @@ void net_task(void *pv)
                     mqtt_sock = -1;
                     con_status = 0;
                     waiting_pingresp = 0;
+                    g_mqtt_connected = 0;
+                    wifi_rejoin_needed = 1;
+                    wifi_retry_tick = now + pdMS_TO_TICKS(5000);
                 }
             }
         }

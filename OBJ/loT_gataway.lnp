@@ -38,6 +38,8 @@
 "..\obj\pcf8574.o"
 "..\obj\dht11.o"
 "..\obj\ap3216c.o"
+"..\obj\w25qxx.o"
+"..\obj\spi.o"
 "..\obj\croutine.o"
 "..\obj\event_groups.o"
 "..\obj\list.o"
