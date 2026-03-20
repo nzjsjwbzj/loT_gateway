@@ -182,6 +182,12 @@ extern uint32_t GetTimerCounterValue(void);
 #define xPortPendSVHandler 	PendSV_Handler
 #define vPortSVCHandler 	SVC_Handler
 
+extern void PreSleepProcessing(uint32_t *ulExpectedIdleTime);
+extern void PostSleepProcessing(uint32_t *ulExpectedIdleTime);
+
+#define configPRE_SLEEP_PROCESSING(xModifiableTime) PreSleepProcessing(&xModifiableTime)
+
+#define configPOST_SLEEP_PROCESSING(xExpectedIdleTime) PostSleepProcessing(&xExpectedIdleTime)
 #endif /* FREERTOS_CONFIG_H */
 
 

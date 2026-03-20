@@ -62,6 +62,7 @@
 "..\obj\mqttunsubscribeclient.o"
 "..\obj\mqttunsubscribeserver.o"
 "..\obj\transport.o"
+"..\obj\md5.o"
 --library_type=microlib --strict --scatter "..\OBJ\loT_gataway.sct"
 --summary_stderr --info summarysizes --map --load_addr_map_info --xref --callgraph --symbols
 --info sizes --info totals --info unused --info veneers
