@@ -40,7 +40,7 @@
 #define ATK_MW8266D_UART_CLK_ENABLE()           do{ __HAL_RCC_USART2_CLK_ENABLE(); }while(0)    /* USART3 ?????? */
 
 /* UART?????????? */
-#define ATK_MW8266D_UART_RX_BUF_SIZE            512
+#define ATK_MW8266D_UART_RX_BUF_SIZE            2048
 #define ATK_MW8266D_UART_TX_BUF_SIZE            512
 
 /* ???????? */

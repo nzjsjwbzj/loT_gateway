@@ -75,3 +75,6 @@
 ..\obj\atk_mw8266d.o: ..\ATK_MW8266D\atk_mw8266d_uart.h
 ..\obj\atk_mw8266d.o: ..\SYSTEM\delay\delay.h
 ..\obj\atk_mw8266d.o: E:\solftwares\keil_v5\ARM\ARMCC\Bin\..\include\string.h
+..\obj\atk_mw8266d.o: ..\HARDWARE\LCD\lcd.h
+..\obj\atk_mw8266d.o: E:\solftwares\keil_v5\ARM\ARMCC\Bin\..\include\stdlib.h
+..\obj\atk_mw8266d.o: ..\HARDWARE\LED\led.h

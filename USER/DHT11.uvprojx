@@ -276,8 +276,8 @@
               </OCR_RVCT3>
               <OCR_RVCT4>
                 <Type>1</Type>
-                <StartAddress>0x8000000</StartAddress>
-                <Size>0x100000</Size>
+                <StartAddress>0x8020000</StartAddress>
+                <Size>0x80000</Size>
               </OCR_RVCT4>
               <OCR_RVCT5>
                 <Type>1</Type>
@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F429xx</Define>
               <Undefine></Undefine>
-              <IncludePath>..\CORE;..\OBJ;..\USER;..\HALLIB\STM32F4xx_HAL_Driver\Inc;..\SYSTEM\delay;..\SYSTEM\sys;..\SYSTEM\usart;..\HARDWARE\LED;..\HARDWARE\KEY;..\HARDWARE\LCD;..\HARDWARE\SDRAM;..\HARDWARE\KEY;..\HARDWARE\IIC;..\HARDWARE\PCF8574;..\HARDWARE\DHT11;..\HARDWARE\AP3216C;..\FreeRTOS\include;..\FreeRTOS\portable\MemMang;..\FreeRTOS\portable\RVDS\ARM_CM4F;..\ATK_MW8266D;..\ATK_MW8266D;..\cJSON\Inc;..\MQTT;..\HARDWARE\SPI;..\HARDWARE\W25QXX;..\MD5</IncludePath>
+              <IncludePath>..\CORE;..\OBJ;..\USER;..\HALLIB\STM32F4xx_HAL_Driver\Inc;..\SYSTEM\delay;..\SYSTEM\sys;..\SYSTEM\usart;..\HARDWARE\LED;..\HARDWARE\KEY;..\HARDWARE\LCD;..\HARDWARE\SDRAM;..\HARDWARE\KEY;..\HARDWARE\IIC;..\HARDWARE\PCF8574;..\HARDWARE\DHT11;..\HARDWARE\AP3216C;..\FreeRTOS\include;..\FreeRTOS\portable\MemMang;..\FreeRTOS\portable\RVDS\ARM_CM4F;..\ATK_MW8266D;..\ATK_MW8266D;..\cJSON\Inc;..\MQTT;..\HARDWARE\SPI;..\HARDWARE\W25QXX;..\MD5;..\OTA;..\HARDWARE\FLASH;..\PROTOCOL;..\APP\NET_APP;..\APP\SPI_FLASH_APP;..\APP\WDOG_APP;..\APP\Sensor_APP</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -553,6 +553,16 @@
               <FileName>stm32f4xx_hal_wwdg.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\HALLIB\STM32F4xx_HAL_Driver\Src\stm32f4xx_hal_wwdg.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm32f4xx_hal_flash_ex.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\HALLIB\STM32F4xx_HAL_Driver\Src\stm32f4xx_hal_flash_ex.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm32f4xx_hal_flash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\HALLIB\STM32F4xx_HAL_Driver\Src\stm32f4xx_hal_flash.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -785,9 +795,54 @@
           <GroupName>OTA</GroupName>
           <Files>
             <File>
+              <FileName>flash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\HARDWARE\FLASH\flash.c</FilePath>
+            </File>
+            <File>
+              <FileName>ota.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\OTA\ota.c</FilePath>
+            </File>
+            <File>
               <FileName>md5.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\MD5\md5.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>APP</GroupName>
+          <Files>
+            <File>
+              <FileName>network_app .c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\APP\NET_APP\network_app .c</FilePath>
+            </File>
+            <File>
+              <FileName>store_flash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\APP\SPI_FLASH_APP\store_flash.c</FilePath>
+            </File>
+            <File>
+              <FileName>wdog.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\APP\WDOG_APP\wdog.c</FilePath>
+            </File>
+            <File>
+              <FileName>sensor_app .c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\APP\Sensor_APP\sensor_app .c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>protocol</GroupName>
+          <Files>
+            <File>
+              <FileName>protocol_onenet.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\PROTOCOL\protocol_onenet.c</FilePath>
             </File>
           </Files>
         </Group>

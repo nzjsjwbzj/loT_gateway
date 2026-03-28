@@ -63,6 +63,11 @@ uint8_t atk_mw8266d_mqtt_pub(char *topic, char *data, uint8_t qos, uint8_t retai
 uint8_t atk_mw8266d_mqtt_sub(char *topic, uint8_t qos);                       /* ????MQTT???? */
 uint8_t atk_mw8266d_mqtt_unsub(char *topic);                                  /* ???????MQTT???? */
 uint8_t atk_mw8266d_mqtt_clean(void);                                         /* ???MQTT???? */
-uint8_t atk_mw8266d_ping(char *ip);                                           /* Ping IP??? */
+uint8_t atk_mw8266d_ping(char *ip);   
+
+//自定义
+void wifi_net_init(char *ssid, char *pwd,char *ip_buf);
+
+/* Ping IP??? */
 
 #endif

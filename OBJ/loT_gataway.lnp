@@ -26,6 +26,8 @@
 "..\obj\stm32f4xx_hal_can.o"
 "..\obj\stm32f4xx_hal_iwdg.o"
 "..\obj\stm32f4xx_hal_wwdg.o"
+"..\obj\stm32f4xx_hal_flash_ex.o"
+"..\obj\stm32f4xx_hal_flash.o"
 "..\obj\delay.o"
 "..\obj\sys.o"
 "..\obj\usart.o"
@@ -62,7 +64,14 @@
 "..\obj\mqttunsubscribeclient.o"
 "..\obj\mqttunsubscribeserver.o"
 "..\obj\transport.o"
+"..\obj\flash.o"
+"..\obj\ota.o"
 "..\obj\md5.o"
+"..\obj\network_app .o"
+"..\obj\store_flash.o"
+"..\obj\wdog.o"
+"..\obj\sensor_app .o"
+"..\obj\protocol_onenet.o"
 --library_type=microlib --strict --scatter "..\OBJ\loT_gataway.sct"
 --summary_stderr --info summarysizes --map --load_addr_map_info --xref --callgraph --symbols
 --info sizes --info totals --info unused --info veneers

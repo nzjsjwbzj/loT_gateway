@@ -2,7 +2,8 @@
 #include "delay.h"
 #include <string.h>
 #include <stdio.h>
-
+#include "lcd.h"
+#include "led.h"
 /**
  * @brief       ATK-MW8266D????????
  * @param       ??
@@ -706,4 +707,54 @@ uint8_t atk_mw8266d_ping(char *ip)
     }
     
     return ret;
+}
+
+
+
+void wifi_net_init(char *ssid, char *pwd,char *ip_buf)
+{
+    uint8_t ret;
+    printf("正在初始化 WiFi...\r\n");
+
+    /* 初始化 ATK-MW8266D WiFi 模块 */
+    ret = atk_mw8266d_init(115200);
+    if (ret != 0)
+    {
+        printf("ATK-MW8266D error\r\n");
+
+        while (1)
+        {
+            ret = atk_mw8266d_init(115200);
+            if(ret==0){
+                break;
+            }
+            else{
+                printf("ATK-MW8266D error\r\n");
+
+            }
+            LED0=!LED0;
+            delay_ms(200);
+        }
+    }
+    
+    printf("正在连接路由器 AP...\r\n");
+    ret  = atk_mw8266d_restore();                               /* 恢复出厂设置 */
+    ret += atk_mw8266d_at_test();                               /* AT 指令测试 */
+    ret += atk_mw8266d_set_mode(1);                             /* 设置为 Station 模式 */
+    ret += atk_mw8266d_sw_reset();                              /* 软件复位模块 */
+    ret += atk_mw8266d_ate_config(0);                           /* 关闭回显 */
+    ret += atk_mw8266d_join_ap(ssid, pwd);  /* 连接目标 WiFi */
+    ret += atk_mw8266d_get_ip(ip_buf);                          /* 获取分配到的 IP 地址 */
+    if (ret != 0)
+    {
+        printf("连接目标 AP 失败!\r\n");
+        while (1)
+        {
+            LED0=!LED0;
+            delay_ms(200);
+        }
+    }
+
+    printf("IP: %s\r\n", ip_buf);
+    LCD_ShowString(30,330,200,16,16, ip_buf);
 }

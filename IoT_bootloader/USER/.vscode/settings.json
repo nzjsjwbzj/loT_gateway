@@ -1,0 +1,70 @@
+{
+  "C_Cpp_Runner.cCompilerPath": "gcc",
+  "C_Cpp_Runner.cppCompilerPath": "g++",
+  "C_Cpp_Runner.debuggerPath": "gdb",
+  "C_Cpp_Runner.cStandard": "",
+  "C_Cpp_Runner.cppStandard": "",
+  "C_Cpp_Runner.msvcBatchPath": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Auxiliary/Build/vcvarsall.bat",
+  "C_Cpp_Runner.useMsvc": false,
+  "C_Cpp_Runner.warnings": [
+    "-Wall",
+    "-Wextra",
+    "-Wpedantic",
+    "-Wshadow",
+    "-Wformat=2",
+    "-Wcast-align",
+    "-Wconversion",
+    "-Wsign-conversion",
+    "-Wnull-dereference"
+  ],
+  "C_Cpp_Runner.msvcWarnings": [
+    "/W4",
+    "/permissive-",
+    "/w14242",
+    "/w14287",
+    "/w14296",
+    "/w14311",
+    "/w14826",
+    "/w44062",
+    "/w44242",
+    "/w14905",
+    "/w14906",
+    "/w14263",
+    "/w44265",
+    "/w14928"
+  ],
+  "C_Cpp_Runner.enableWarnings": true,
+  "C_Cpp_Runner.warningsAsError": false,
+  "C_Cpp_Runner.compilerArgs": [],
+  "C_Cpp_Runner.linkerArgs": [],
+  "C_Cpp_Runner.includePaths": [
+    "e:\\stm32\\【正点原子】阿波罗STM32F429开发板资料 资料盘(A盘)\\4，程序源码\\2，标准例程-HAL库版本\\实验0-1 Template工程模板-新建工程章节使用\\CORE",
+    "e:\\stm32\\【正点原子】阿波罗STM32F429开发板资料 资料盘(A盘)\\4，程序源码\\2，标准例程-HAL库版本\\实验0-1 Template工程模板-新建工程章节使用\\OBJ",
+    "e:\\stm32\\【正点原子】阿波罗STM32F429开发板资料 资料盘(A盘)\\4，程序源码\\2，标准例程-HAL库版本\\实验0-1 Template工程模板-新建工程章节使用\\USER",
+    "e:\\stm32\\【正点原子】阿波罗STM32F429开发板资料 资料盘(A盘)\\4，程序源码\\2，标准例程-HAL库版本\\实验0-1 Template工程模板-新建工程章节使用\\HALLIB\\STM32F4xx_HAL_Driver\\Inc",
+    "e:\\stm32\\【正点原子】阿波罗STM32F429开发板资料 资料盘(A盘)\\4，程序源码\\2，标准例程-HAL库版本\\实验0-1 Template工程模板-新建工程章节使用\\SYSTEM\\delay",
+    "e:\\stm32\\【正点原子】阿波罗STM32F429开发板资料 资料盘(A盘)\\4，程序源码\\2，标准例程-HAL库版本\\实验0-1 Template工程模板-新建工程章节使用\\SYSTEM\\sys",
+    "e:\\stm32\\【正点原子】阿波罗STM32F429开发板资料 资料盘(A盘)\\4，程序源码\\2，标准例程-HAL库版本\\实验0-1 Template工程模板-新建工程章节使用\\SYSTEM\\usart",
+    "e:\\stm32\\【正点原子】阿波罗STM32F429开发板资料 资料盘(A盘)\\4，程序源码\\2，标准例程-HAL库版本\\实验0-1 Template工程模板-新建工程章节使用\\HARDWARE\\LED",
+    "E:\\keil_5\\ARM\\ARMCC\\include",
+    "e:\\stm32\\【正点原子】阿波罗STM32F429开发板资料 资料盘(A盘)\\4，程序源码\\2，标准例程-HAL库版本\\实验0-1 Template工程模板-新建工程章节使用\\HALLIB\\STM32F4xx_HAL_Driver\\Src"
+  ],
+  "C_Cpp_Runner.includeSearch": [
+    "*",
+    "**/*"
+  ],
+  "C_Cpp_Runner.excludeSearch": [
+    "**/build",
+    "**/build/**",
+    "**/.*",
+    "**/.*/**",
+    "**/.vscode",
+    "**/.vscode/**"
+  ],
+  "C_Cpp_Runner.useAddressSanitizer": false,
+  "C_Cpp_Runner.useUndefinedSanitizer": false,
+  "C_Cpp_Runner.useLeakSanitizer": false,
+  "C_Cpp_Runner.showCompilationTime": false,
+  "C_Cpp_Runner.useLinkTimeOptimization": false,
+  "C_Cpp_Runner.msvcSecureNoWarnings": false
+}

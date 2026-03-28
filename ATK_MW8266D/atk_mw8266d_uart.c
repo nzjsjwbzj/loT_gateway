@@ -166,9 +166,7 @@ void ATK_MW8266D_UART_IRQHandler(void)
         }
         else
         {
-            /* ?????????????????????????????????? */
-            g_uart_rx_frame.sta.len = 0;
-            g_uart_rx_frame.buf[g_uart_rx_frame.sta.len++] = tmp;
+            g_uart_rx_frame.sta.len = ATK_MW8266D_UART_RX_BUF_SIZE - 1;
         }
     }
 
@@ -190,5 +188,4 @@ void ATK_MW8266D_UART_IRQHandler(void)
         portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     }
 }
-
 

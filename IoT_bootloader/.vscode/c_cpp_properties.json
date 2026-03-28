@@ -1,0 +1,25 @@
+{
+    "configurations": [
+        {
+            "name": "windows-clang-x64",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/BOOT",
+                "${workspaceFolder}/SYSTEM/delay",
+                "${workspaceFolder}/ATK_MW8266D",
+                "${workspaceFolder}/FLASH"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "windowsSdkVersion": "10.0.26100.0",
+            "compilerPath": "cl.exe",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-clang-x64"
+        }
+    ],
+    "version": 4
+}
