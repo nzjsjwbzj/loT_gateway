@@ -1,7 +1,5 @@
 # STM32 FreeRTOS 智能物联网网关 (STM32-IoT-Gateway)
 
-![RTOS](file:///E:/Tdoc/%E5%B5%8C%E8%BD%AFSTM32%E8%A3%B8%E6%9C%BA.assets/RTOS-FreeRTOS_V9.0.0-blue.svg?lastModify=1774671062) ![MCU](file:///E:/Tdoc/%E5%B5%8C%E8%BD%AFSTM32%E8%A3%B8%E6%9C%BA.assets/MCU-STM32F429IGT6-red.svg?lastModify=1774671062) ![Protocol](file:///E:/Tdoc/%E5%B5%8C%E8%BD%AFSTM32%E8%A3%B8%E6%9C%BA.assets/Protocol-MQTT_V3.1.1-green.svg?lastModify=1774671062) ![License](file:///E:/Tdoc/%E5%B5%8C%E8%BD%AFSTM32%E8%A3%B8%E6%9C%BA.assets/License-MIT-brightgreen.svg?lastModify=1774671062)
-
 本项目是一个基于 STM32F429的物联网网关。系统采用 **FreeRTOS** 实时操作系统统筹调度，通过 ESP8266 (ATK-MW8266D) 透传模式接入 OneNET 平台，实现传感器数据的云端上报与云端指令的设备控制。
 
 项目解决了网络环境下的断网数据丢失、**死机无响应**、**远程固件更新难**等问题。
