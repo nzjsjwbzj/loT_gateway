@@ -36,23 +36,6 @@
 * **HMAC-SHA1 加密与安全校验机制**：支持云端下发任务 ID 与 MD5。过 HTTP Ranged Requests (分块下载)，在后台静默下载固件切片后，累加计算 MD5。只有下载完整且 MD5 效验通过后，才修改 Meta 标志位并重启交由 Bootloader 搬运，杜绝升级变砖风险。
 * **JSON 动态解析**：结合 `cJSON` 库，处理来自平台的物模型指令，支持下发周期修改、下发控制 LED/蜂鸣器以及触发 OTA 升级等操作。
 
----
-
-## 目录结构 (Directory Structure)
-
-├── APP/
-│   ├── NET_APP/        # 网络核心功能：重连机制、数据组包、MQTT 协议收发
-│   ├── Sensor_APP/     # 传感器应用：多传感器采样轮询任务
-│   ├── SPI_FLASH_APP/  # 存储应用：Flash 上电恢复、断点续传队列逻辑
-│   └── WDOG_APP/       # 看门狗应用：基于位图的多任务健康监控机制
-├── ATK_MW8266D/        # 网卡/Wi-Fi模块底层 AT 指令驱动与透传管理
-├── OTA/                # OTA 下载流程控制与校验模块 (MD5, Meta配置)
-├── PROTOCOL/           # 与云平台对接的物模型解析层 (cJSON 解析)
-├── HARDWARE/           # 底层外设驱动 (AP3216C, W25QXX, LCD, SDRAM, PCF8574等)
-├── FreeRTOS/           # FreeRTOS V9.0 实时系统源码及配置
-├── SYSTEM/             # STM32 时钟、延时、串口打印等系统底层环境
-└── USER/               # Main 函数、中断向量配置及工程入口
-
 ## 硬件与环境依赖 (Hardware & Software)
 
 * **主控芯片**: 正点原子STM32F429IGT6 (180MHz, 1MB Flash, 256KB RAM)
