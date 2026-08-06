@@ -84,4 +84,7 @@
 ..\obj\sensor_app .o: ..\FreeRTOS\include\list.h
 ..\obj\sensor_app .o: ..\FreeRTOS\include\queue.h
 ..\obj\sensor_app .o: ..\FreeRTOS\include\semphr.h
+..\obj\sensor_app .o: ..\HARDWARE\AP3216C\ap3216c.h
+..\obj\sensor_app .o: ..\HARDWARE\DHT11\dht11.h
 ..\obj\sensor_app .o: ..\APP\WDOG_APP\wdog.h
+..\obj\sensor_app .o: ..\APP\SPI_FLASH_APP\store_flash.h

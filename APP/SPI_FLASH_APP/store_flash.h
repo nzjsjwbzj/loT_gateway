@@ -2,7 +2,11 @@
 #define STORE_FLASH_H
 #include <stdint.h>
 #include "FreeRTOS.h"
-#include "semphr.h"
+#include "task.h"
+#include "queue.h"
+
+// ARMCC 默认不支持匿名 union（C99 模式），需要此 pragma 才能编译 FlashRequest
+#pragma anon_unions
 
 /**
  * @brief Flash 中单条断网存储记录的数据结构
@@ -10,13 +14,14 @@
  */
 typedef struct
 {
-    uint8_t flag;      /**< 记录标志位：0xFF为空，0xA5为有效数据，0x00为已发送作废数据 */
-    uint16_t len;      /**< 实际有效负载的数据长度 */
-    char data[253];    /**< 具体的负载数据内容，总结构体大小 1+2+253 = 256 字节 */
+    uint8_t  flag;      /**< 记录标志位：0xFF为空，0xA5为有效数据，0x00为已发送作废数据 */
+    uint32_t seq;       /**< 全局递增序列号，用于断电恢复时确定数据写入的先后顺序 */
+    uint16_t len;       /**< 实际有效负载的数据长度 */
+    char     data[249]; /**< 具体的负载数据内容，总结构体大小 1+4+2+249 = 256 字节 */
 } FlashRecord;
 
 // ===== 存储空间分配与结构宏定义 =====
-#define FLASH_DATA_START      0x00100000   // 离线数据存储池在 Flash 中的物理首地址 (1MB 定位)
+#define FLASH_DATA_START      0x00200000   // 离线数据存储池在 Flash 中的物理首地址 (1MB 定位)
 #define FLASH_DATA_SIZE       (1024 * 1024)// 分配给离线存储池的总容量 (此处为 1MB 空间)
 #define FLASH_SECTOR_SIZE     4096         // W25Q 系列 Flash 的最小擦除单元：扇区大小 (4KB)
 #define FLASH_RECORD_SIZE     256          // 一条记录占用的字节数：256B (即 1 页/Page 的大小)
@@ -25,47 +30,94 @@ typedef struct
 
 // ===== 数据头部状态标志位定义 =====
 #define FLASH_FLAG_EMPTY      0xFF         // 擦除后默认全 1 (1111 1111) => 表示可用空位
-#define FLASH_FLAG_VALID      0xA5         // 我们自定义的一个魔数 (1010 0101) => 表示有未上传的有效数据
+#define FLASH_FLAG_VALID      0xA6        // 自定义魔数（不要A5，和RTOS的重叠了，后面不好查BUG） => 表示有未上传的有效数据
 #define FLASH_FLAG_SENT       0x00         // 数据上传成功后，把有效标志修改为全 0 (无需擦除，只能将 1 写为 0)
 
+// ===== 消息队列：Flash 写任务的消息类型 =====
+#define FLASH_REQ_DATA_MAX    249          // push 消息中数据字段的最大长度
+#define FLASH_REQ_QUEUE_LEN   10           // 请求队列深度
+
+typedef enum {
+    FLASH_REQ_PUSH = 0,      // 存一条离线数据
+    FLASH_REQ_PEEK,           // 读取最旧的一条有效数据（需同步应答）
+    FLASH_REQ_MARK_SENT,      // 将指定索引的数据标记为已发送
+    FLASH_REQ_FORMAT,         // 擦除整个离线数据区（格式化）
+} FlashReqType;
+
+typedef struct {
+    FlashReqType type;
+    union {
+        struct {
+            char     data[FLASH_REQ_DATA_MAX];
+            uint16_t len;
+        } push;
+        struct {
+            char     *out;        // 调用者提供的读缓冲区
+            uint16_t  max_len;
+            uint16_t *out_len;    // 输出实际数据长度
+            uint32_t *out_index;  // 输出数据所在索引
+            int       *ret;       // 输出返回值 (1=成功 0=失败)
+        } peek;
+        struct {
+            uint32_t index;       // 要标记为 SENT 的逻辑索引
+        } mark_sent;
+    };
+} FlashRequest;
+
 // ===== 全局变量及句柄 =====
-extern SemaphoreHandle_t xFlashMutex; // 并发写保护：多任务操作 Flash 时的互斥锁
+extern QueueHandle_t xFlashReqQueue;   // Flash 写任务的请求队列
 
-// 环形队列游标指针：为了方便查找，抽象出 0 到 FLASH_RECORD_COUNT-1 的逻辑索引
-extern uint32_t flash_read_index;     // 读游标：指向下一个待读取并发送的有效数据的逻辑索引
-extern uint32_t flash_write_index;    // 写游标：指向下一个空的位置，用于存入新断网数据的逻辑索引
-extern uint32_t flash_valid_count;    // 计数器：当前环形队列里还有多少条"有效且未发送"的数据
-extern uint8_t flash_ready;           // 标志位：SPI Flash 芯片是否存在并正常初始化 (1=正常可用)
+// 环形队列游标指针（只读，供外部模块参考统计信息）
+extern uint32_t flash_read_index;      // 读游标
+extern uint32_t flash_write_index;     // 写游标
+extern uint32_t flash_valid_count;     // 有效未发送数据计数
+extern uint32_t g_flash_seq;           // 全局递增序列号
+extern uint8_t  flash_ready;           // SPI Flash 芯片是否可用 (1=正常)
 
-// ===== 提供给外部上层模块调用的 API 接口 =====
-
-/**
- * @brief  初始化离线数据存储管理机制，通常需要扫描一遍 Flash 恢复读写游标和统计当前有效报文量
- */
-void flash_store_init(void);
+// ===== 对外 API：异步接口（通过队列委托给 flash_writer_task） =====
 
 /**
- * @brief  向 Flash 中压入一条新的离线数据 (需要获取锁后调用)
- * @param  data: 待存数据的指针 (通常是 cJSON 生成的字符串格式)
- * @param  len: 待存数据的字节长度 (不能超过上面定义的 253）
+ * @brief  异步存入一条离线数据，立即返回
+ * @param  data: 数据指针
+ * @param  len:  数据长度（≤249）
+ * @retval 1=已入队  0=队列满，建议调用者稍后重试
  */
-void flash_store_push_locked(const char *data, uint16_t len);
+int flash_store_push_async(const char *data, uint16_t len);
 
 /**
- * @brief  从 Flash 中取出一条符合条件的有效数据查看其内容 (带锁环境调用)
- * @param  out: 数据拷贝输出的目标缓存区
- * @param  max_len: 目标缓存区的容量大小，防止溢出
- * @param  out_len: 返回读出的实际有效载荷长度
- * @param  out_index: 告诉你这条数据在什么位置，方便后续使用位置坐标删数据
- * @return 0 成功，-1 没搜到或者失败
+ * @brief  读取最旧的一条有效数据（同步，阻塞等待 flash_writer_task 应答）
+ * @param  out:      输出数据缓冲区
+ * @param  max_len:  缓冲区容量
+ * @param  out_len:  输出实际数据长度
+ * @param  out_index:输出数据索引（供 mark_sent 用）
+ * @retval 1=成功  0=失败（无数据或错误）
  */
-int flash_store_peek_locked(char *out, uint16_t max_len, uint16_t *out_len, uint32_t *out_index);
+int flash_store_peek_async(char *out, uint16_t max_len, uint16_t *out_len, uint32_t *out_index);
 
 /**
- * @brief  把指定逻辑索引位的那条数据标记作废（设为 SENT=0x00）(带锁环境调用)
- * @param  index: 需要清理作废的记录的逻辑下标
+ * @brief  异步标记一条数据为已发送，立即返回
+ * @param  index: 要标记的数据逻辑索引
  */
-void flash_store_mark_sent_locked(uint32_t index);
+void flash_store_mark_sent_async(uint32_t index);
 
+/**
+ * @brief  擦除整个离线数据区（格式化），读/写指针与计数全部清零
+ * @note   会阻塞较长时间（擦除 256 个扇区），调用方不要在高优先级/中断里用
+ */
+void flash_store_format_all(void);
+
+/**
+ * @brief  异步请求擦除整个离线数据区（委托给 flash_writer_task 串行执行）
+ * @note   通过队列排队，不会与正在进行的写入冲突；立即返回
+ */
+void flash_store_format_async(void);
+
+/**
+ * @brief  Flash 写任务入口（FreeRTOS 任务函数）
+ *         唯一直接操作 SPI Flash 的任务，处理来自 xFlashReqQueue 的所有请求
+ */
+void flash_writer_task(void *pv);
+
+
+ void flash_store_init(void);
 #endif
-

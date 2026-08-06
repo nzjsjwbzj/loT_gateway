@@ -3,24 +3,39 @@
 #include "key.h"
 #include "atk_mw8266d_uart.h"
 #include "atk_mw8266d.h"
+#include "ota.h"
+#include "wdog.h"
+#include "delay.h"   // delay_ms 延时函数
 
 
-// MQTT相关全局变量
-static int mqtt_sock = -1;  // MQTT socket ID
-static unsigned short mqtt_packet_id = 1;  // MQTT包ID
-static unsigned char mqtt_send_buf[512];    // MQTT发送缓冲区
-static unsigned char mqtt_recv_buf[512];    // MQTT接收缓冲区
-volatile uint8_t g_ota_request = 0;
-volatile uint8_t g_mqtt_connected = 0;
-bool  link_status; // WiFi 链路状态
-bool  con_status;  // MQTT 连接状态
-char ip_buf[16];   // IP 地址缓冲区
+// ===== 文件级全局状态 =====
+static unsigned char mqtt_send_buf[512];    // 发送缓冲区
+static unsigned char mqtt_recv_buf[512];    // 接收缓冲区
+volatile uint8_t g_ota_request = 0;         // OTA 升级请求标志（由 protocol_onenet 置位）
+
 /**
- * @brief       初始化网络任务上下文结构体
- * @param[out]  ctx: 指向网络任务上下文结构体的指针，将被清零并赋予默认初始值
- * @note        此函数设定了 MQTT 断线重连的初始退避时间、最大退避时间，
- *              以及心跳保活(Ping)的周期间隔和超时阈值。同时对 Paho MQTT 
- *              的结构体进行标准的初始化填充。
+ * @brief  MQTT 连接状态（文件内收敛，对外通过 net_is_connected() 查询）
+ */
+typedef struct
+{
+    int      sock;       // 套接字句柄，-1 = 未连接
+    uint8_t  connected;  // 1 = 已连接（合并了原 con_status 和 g_mqtt_connected 两个全局变量）
+} NetState;
+static NetState net_state = { -1, 0 };
+
+uint8_t net_is_connected(void)
+{
+    return net_state.connected;
+}
+
+/* 前向声明：这两个函数被靠前的函数（net_handle_key / net_mqtt_handshake）调用 */
+static void net_disconnect(NetTaskContext *ctx);
+static void net_mark_wifi_rejoin(NetTaskContext *ctx, TickType_t now);
+
+/**
+ * @brief       初始化网络任务上下文
+ * @param[out]  ctx: 清零并设置默认参数
+ * @note        默认：重连退避 1s 起步（最大 32s），心跳空闲阈值 5s、超时 2s
  */
 void net_ctx_init(NetTaskContext *ctx)
 {
@@ -29,40 +44,38 @@ void net_ctx_init(NetTaskContext *ctx)
     ctx->max_backoff_ms = 32000;
     ctx->ping_interval_tick = pdMS_TO_TICKS(5000);
     ctx->ping_timeout_tick = pdMS_TO_TICKS(2000);
-    
-    // 使用临时变量初始化复杂结构体
+
+    // 注意：ARMCC 的 C99 模式不支持 struct = 复合字面量直接赋值，必须用临时变量 + memcpy
     MQTTPacket_connectData temp_connect = MQTTPacket_connectData_initializer;
     memcpy(&ctx->connect_data, &temp_connect, sizeof(MQTTPacket_connectData));
-    
+
     MQTTString temp_string = MQTTString_initializer;
     memcpy(&ctx->topic_string, &temp_string, sizeof(MQTTString));
     memcpy(&ctx->subscribe_topic, &temp_string, sizeof(MQTTString));
-    
+
     ctx->sub_packet_id = 1;
 }
 
 /**
- * @brief       定时打印网络和离线存储的统计信息
- * @param[in]   ctx: 指向网络任务上下文结构体的指针，包含统计计数
- * @param[in]   now: 当前系统滴答时钟时间
- * @note        每隔 5 秒通过串口打印一次当次开机以来的离线数据缓存总数、
- *              成功补传的总数、以及当前 Flash 中待发送的遗留项个数。
+ * @brief       定时打印统计信息（每 5 秒一次）
+ * @param[in]   ctx: 含统计计数
+ * @param[in]   now: 当前系统滴答
+ * @note        打印：本次开机缓存总数 / 成功补发总数 / Flash 剩余待发数
  */
 static void net_print_stats(NetTaskContext *ctx, TickType_t now)
 {
     if ((now - ctx->last_report_tick) > pdMS_TO_TICKS(5000))
     {
-        printf("cache_total=%lu, sent_total=%lu, pending=%lu\r\n",
+        printf("[stat] cached=%lu sent=%lu pending=%lu\r\n",
                ctx->cached_total, ctx->sent_total, (uint32_t)flash_valid_count);
         ctx->last_report_tick = now;
     }
 }
 
 /**
- * @brief       构建 MQTT 连接配置报文的参数体
- * @param[out]  ctx: 指向网络任务上下文结构体的指针，其中的 connect_data 成员将被填充
- * @note        根据硬件要求和宏定义填充 MQTT 版本(V4)、Client ID、KeepAlive (60s)、
- *              清空会话标志(CleanSession) 以及访问控制的用户名和密码。
+ * @brief       填充 MQTT CONNECT 报文的连接参数
+ * @param[out]  ctx: 填充 connect_data 字段
+ * @note        版本 V4、ClientID、KeepAlive 60s、CleanSession、用户名/密码
  */
 static void net_build_connect(NetTaskContext *ctx)
 {
@@ -76,13 +89,13 @@ static void net_build_connect(NetTaskContext *ctx)
 }
 
 /**
- * @brief       处理外部按键事件，用于控制网络的连接与断开
- * @param[in,out] ctx: 指向网络任务上下文结构体的指针，用于设置重连标志和退避参数
- * @param[in]   now: 当前系统滴答时钟时间
- * @param[out]  request_connect: 传出标志，若为 1 则表示用户请求立即发起连接
- * @note        - 按下 KEY0: 开启自动重连，并请求立即尝试连接 MQTT Broker。
- *              - 按下 KEY1: 若当前处于连接状态，则发送 Disconnect 报文、切断 TCP 
- *                并清空重连等待时长状态，以启动全新的重连周期。
+ * @brief       处理按键控制网络连接/断开
+ * @param[in,out] ctx: 更新重连标志和退避参数
+ * @param[in]   now: 当前系统滴答
+ * @param[out]  request_connect: 置 1 表示请求立即连接
+ * @note        KEY0: 开启自动重连并立即尝试连接。
+ *              KEY1: 已连接则发送 DISCONNECT 并断开，1.5 秒后开始新的重连周期。
+ *              KEY2: 擦除 SPI Flash 离线数据区（格式化，清空积压数据）。
  */
 static void net_handle_key(NetTaskContext *ctx, TickType_t now, uint8_t *request_connect)
 {
@@ -93,18 +106,19 @@ static void net_handle_key(NetTaskContext *ctx, TickType_t now, uint8_t *request
             *request_connect = 1;
             printf("Connecting to MQTT Broker...\r\n");
             break;
+        case WKUP_PRES:
+            printf("WK_UP pressed: erasing SPI Flash offline data area...\r\n");
+            flash_store_format_async();   // 委托 flash_writer_task 串行擦除，避免与写入冲突
+            break;
         case KEY1_PRES:
-            if (mqtt_sock >= 0 && con_status)
+            if (net_state.sock >= 0 && net_state.connected)
             {
                 ctx->packet_len = MQTTSerialize_disconnect(mqtt_send_buf, sizeof(mqtt_send_buf));
                 if (ctx->packet_len > 0)
                 {
-                    transport_sendPacketBuffer(mqtt_sock, mqtt_send_buf, ctx->packet_len);
+                    transport_sendPacketBuffer(net_state.sock, mqtt_send_buf, ctx->packet_len);
                 }
-                transport_close(mqtt_sock);
-                mqtt_sock = -1;
-                con_status = 0;
-                g_mqtt_connected = 0;
+                net_disconnect(ctx);
                 printf("MQTT Disconnected!\r\n");
             }
             ctx->auto_reconnect = 1;
@@ -116,277 +130,330 @@ static void net_handle_key(NetTaskContext *ctx, TickType_t now, uint8_t *request
     }
 }
 
+/* ====================================================================
+ * MQTT 连接状态机 — 拆分为 4 个职责单一的函数 + 1 个编排者
+ * ==================================================================== */
+
 /**
- * @brief       尝试建立网络与 MQTT 服务器的连接
- * @param[in,out] ctx: 网络任务上下文指针，用于管理重连逻辑和计时器
- * @param[in]   now: 当前的系统滴答时钟(TickTock)
- * @param[in]   request_connect: 外部请求立刻连接的标志（如按键触发）
- * @retval      uint8_t: 1 表示连接成功或已连接；0 表示当前未连接
- * @note        此函数包含了 Wi-Fi 自动重连、传输层 (TCP) 打开、
- *              MQTT CONNECT 报文发送及 CONNACK 校验的完整业务流。
+ * @brief  重试门禁：检查是否到了允许重试的时间
+ * @retval 1=允许尝试  0=未到时间
+ */
+static uint8_t net_retry_gate(NetTaskContext *ctx, TickType_t now, uint8_t force)
+{
+    if (force) return 1;  // 按键强制请求连接，直接放行
+    if (!ctx->auto_reconnect) return 0;
+    if (ctx->next_retry_tick == 0 || now >= ctx->next_retry_tick) return 1; // 到重试时间了
+    return 0;
+}
+
+/**
+ * @brief  WiFi 层：确保模组已连上 AP 并获取到 IP
+ *         WiFi 重连用固定 5 秒间隔（信号问题翻倍无意义）
+ * @retval 1=链路就绪  0=WiFi 不通
+ */
+static uint8_t net_wifi_ensure_link(NetTaskContext *ctx, TickType_t now)
+{
+    char ip_buf[16]; // 只用来承载 get_ip 的返回值，内容不需要读取
+
+    // 需要重连 WiFi 且到了重试时间 → 尝试连接
+    if (ctx->wifi_rejoin_needed && (ctx->wifi_retry_tick == 0 || now >= ctx->wifi_retry_tick))
+    {
+        if (atk_mw8266d_join_ap(DEMO_WIFI_SSID, DEMO_WIFI_PWD) == ATK_MW8266D_EOK)
+        {
+            ctx->wifi_rejoin_needed = 0;
+            ctx->wifi_retry_tick    = 0;
+        }
+        else
+        {
+            ctx->wifi_retry_tick = now + pdMS_TO_TICKS(5000);
+            return 0;
+        }
+    }
+
+    // WiFi 连着但没拿到 IP（透传模式异常），重连一次
+    if (atk_mw8266d_get_ip(ip_buf) != ATK_MW8266D_EOK)
+    {
+        if (atk_mw8266d_join_ap(DEMO_WIFI_SSID, DEMO_WIFI_PWD) != ATK_MW8266D_EOK)
+        {
+            ctx->wifi_rejoin_needed = 1;
+            ctx->wifi_retry_tick    = now + pdMS_TO_TICKS(5000);
+            return 0;
+        }
+    }
+
+    atk_mw8266d_uart_rx_restart();  // 清掉串口里残留的旧数据
+    return 1;
+}
+
+/**
+ * @brief  MQTT 握手：TCP 连接 → 发 CONNECT → 收 CONNACK → 发 Subscribe
+ *         只做业务步骤，不处理重连退避
+ * @retval 1=握手成功  0=失败（已断开）
+ */
+static uint8_t net_mqtt_handshake(NetTaskContext *ctx, TickType_t now)
+{
+    // 第一步：建立 TCP 连接（进入透传模式）
+    net_state.sock = transport_open(MQTT_BROKER_IP, atoi(MQTT_BROKER_PORT));
+    if (net_state.sock < 0)
+    {
+        printf("Transport Open Failed!\r\n");
+        net_state.connected = 0;
+        net_mark_wifi_rejoin(ctx, now);
+        return 0;
+    }
+
+    printf("TCP Connected, Entered Transparent Mode.\r\n");
+    delay_ms(500);
+
+    // 第二步：发送 MQTT CONNECT 报文
+    net_build_connect(ctx);
+    ctx->packet_len = MQTTSerialize_connect(mqtt_send_buf, sizeof(mqtt_send_buf), &ctx->connect_data);
+    if (ctx->packet_len <= 0 ||
+        transport_sendPacketBuffer(net_state.sock, mqtt_send_buf, ctx->packet_len) != ctx->packet_len)
+    {
+        printf("MQTT Connect Send Failed!\r\n");
+        net_disconnect(ctx);
+        return 0;
+    }
+
+    // 第三步：接收 CONNACK 回应
+    ctx->packet_len = MQTTPacket_read(mqtt_recv_buf, sizeof(mqtt_recv_buf), transport_getdata);
+    if (ctx->packet_len <= 0 ||
+        !MQTTDeserialize_connack(&ctx->sessionPresent, &ctx->connack_rc, mqtt_recv_buf, ctx->packet_len))
+    {
+        printf("MQTT CONNACK Timeout or Error!\r\n");
+        net_disconnect(ctx);
+        return 0;
+    }
+
+    // 第四步：检查服务器返回码（0 = 接受连接）
+    if (ctx->connack_rc != MQTT_CONNECTION_ACCEPTED)
+    {
+        printf("MQTT Rejected! RC=%d\r\n", ctx->connack_rc);
+        net_disconnect(ctx);
+        return 0;
+    }
+
+    // 第五步：连接成功，记录状态并发订阅
+    printf("MQTT Connected!\r\n");
+    net_state.connected = 1;
+    ctx->last_rx_tick = now;
+    ctx->last_ping_tick   = now;
+    ctx->waiting_pingresp = 0;
+
+    ctx->subscribe_topic.cstring = MQTT_TOPIC_SUB;
+    int req_qos[1] = {0};
+    ctx->packet_len = MQTTSerialize_subscribe(mqtt_send_buf, sizeof(mqtt_send_buf),
+                                               0, ctx->sub_packet_id++,
+                                               1, &ctx->subscribe_topic, req_qos);
+    if (ctx->packet_len > 0)
+    {
+        transport_sendPacketBuffer(net_state.sock, mqtt_send_buf, ctx->packet_len);
+        printf("MQTT Subscribe Sent.\r\n");
+    }
+    return 1;
+}
+
+/**
+ * @brief  更新重连退避：连接成功 → 重置 1s；失败 → 翻倍（1→2→4→…→32s 封顶）
+ * @note   翻倍后加随机抖动，避免大量设备同时恢复时一起重连冲击服务器（惊群效应）
+ */
+static void net_backoff_update(NetTaskContext *ctx, TickType_t now)
+{
+    if (net_state.connected)
+    {
+        // 连接成功 → 退避清零
+        ctx->backoff_ms       = 1000;
+        ctx->next_retry_tick  = 0;
+    }
+    else if (ctx->auto_reconnect)
+    {
+        // 连接失败 → 退避翻倍（封顶 32s）
+        if (ctx->backoff_ms < ctx->max_backoff_ms)
+            ctx->backoff_ms <<= 1;
+        if (ctx->backoff_ms > ctx->max_backoff_ms)
+            ctx->backoff_ms = ctx->max_backoff_ms;
+
+        // 抖动范围 0 ~ backoff_ms/2，用 HAL Tick 低位做简易随机源
+        // 例：backoff=4s → jitter∈[0,2s] → 实际等待 4~6s
+        uint32_t jitter = HAL_GetTick() % (ctx->backoff_ms / 2U + 1U);
+        ctx->next_retry_tick = now + pdMS_TO_TICKS(ctx->backoff_ms + jitter);
+    }
+}
+
+/**
+ * @brief  断开 MQTT 连接：关 socket、清连接状态
+ * @note   全文件所有"发送/接收失败 → 断开"路径统一走这里
+ */
+static void net_disconnect(NetTaskContext *ctx)
+{
+    if (net_state.sock >= 0)
+    {
+        transport_close(net_state.sock);
+    }
+    net_state.sock = -1;
+    net_state.connected = 0;
+}
+
+/**
+ * @brief  标记需要重连 WiFi，并设定 5 秒后的重试时间
+ */
+static void net_mark_wifi_rejoin(NetTaskContext *ctx, TickType_t now)
+{
+    ctx->wifi_rejoin_needed = 1;
+    ctx->wifi_retry_tick = now + pdMS_TO_TICKS(5000);
+}
+
+/**
+ * @brief  连接编排者（net_task 主循环调用）
+ *         ① 已连接？直接返回
+ *         ② 到重试时间了吗？（门禁）
+ *         ③ WiFi 就绪了吗？
+ *         ④ MQTT 握手
+ *         ⑤ 更新退避状态
  */
 static uint8_t net_try_connect(NetTaskContext *ctx, TickType_t now, uint8_t request_connect)
 {
-    if (con_status && mqtt_sock >= 0) return 1; // 如果已经处于连接状态且 socket 正常，直接返回 1
-    g_mqtt_connected = 0;                       // 标记全局 MQTT 连接状态为未连接
-    uint8_t can_try = request_connect;          // 初始化是否允许尝试连接的标志为外部请求标志
-    if (!can_try && ctx->auto_reconnect)        // 如果外部没有强制要求，但开启了自动重连
-    {
-        if (ctx->next_retry_tick == 0 || now >= ctx->next_retry_tick) // 如果没有设置重连时间或者已经到达下一次重连时间
-        {
-            can_try = 1;                        // 允许尝试
-        }
-    }
-    if (!can_try) return 0;                     // 如果仍然不允许尝试，退出并返回 0
+    if (net_state.connected && net_state.sock >= 0) return 1;
 
-    if (ctx->wifi_rejoin_needed && (ctx->wifi_retry_tick == 0 || now >= ctx->wifi_retry_tick)) // 若需要重新加入WiFi且满足重试时间
+    net_state.connected = 0;
+
+    if (!net_retry_gate(ctx, now, request_connect)) return 0;
+    if (!net_wifi_ensure_link(ctx, now))             return 0;
+    if (!net_mqtt_handshake(ctx, now))
     {
-        uint8_t join_ret = atk_mw8266d_join_ap(DEMO_WIFI_SSID, DEMO_WIFI_PWD); // 尝试连接设定的 AP 热点
-        if (join_ret == ATK_MW8266D_EOK)        // 如果 Wi-Fi 加入成功
-        {
-            ctx->wifi_rejoin_needed = 0;        // 清除 Wi-Fi 重连标志
-            ctx->wifi_retry_tick = 0;           // 清空下一次 Wi-Fi 重试时间
-        }
-        else                                    // 加入失败
-        {
-            ctx->wifi_retry_tick = now + pdMS_TO_TICKS(5000); // 设定下一次尝试加入 Wi-Fi 的时间为 5 秒后
-            return 0;                           // 返回未连接
-        }
+        net_disconnect(ctx);
     }
-    if (atk_mw8266d_get_ip(ip_buf) != ATK_MW8266D_EOK) // 获取当前模块的 IP，检查是否合法或真正连上网络
-    {
-        uint8_t join_ret = atk_mw8266d_join_ap(DEMO_WIFI_SSID, DEMO_WIFI_PWD); // 如果没拿到IP，再次尝试加入 AP 热点
-        if (join_ret != ATK_MW8266D_EOK)        // 如果还是失败
-        {
-            ctx->wifi_rejoin_needed = 1;        // 标记需要重新连接 Wi-Fi
-            ctx->wifi_retry_tick = now + pdMS_TO_TICKS(5000); // 设定下一次尝试时间为 5 秒后
-            return 0;                           // 返回未连接
-        }
-    }
-    atk_mw8266d_uart_rx_restart();              // 重新启动 ATK 模块的串口接收（清理旧数据）
-    mqtt_sock = transport_open(MQTT_BROKER_IP, atoi(MQTT_BROKER_PORT)); // 打开底层传输套接字，连接到 MQTT Broker 的 IP 和端口
-    if (mqtt_sock < 0)                          // 如果 TCP 连接建立失败
-    {
-        printf("Transport Open Failed!\r\n");   // 打印打开传输层失败信息
-        con_status = 0;                         // 连接状态置零
-        ctx->wifi_rejoin_needed = 1;            // 标记可能 Wi-Fi 不稳定，需要重连
-        ctx->wifi_retry_tick = now + pdMS_TO_TICKS(5000); // 退避 5 秒
-    }
-    else                                        // TCP 连接建立成功
-    {
-        printf("TCP Connected, Entered Transparent Mode.\r\n"); // 打印 TCP 连接成功（通常模块会进入透传模式）
-        delay_ms(500);                          // 延时 500ms 等待模块状态稳定
-        net_build_connect(ctx);                 // 构造 MQTT 连接配置相关数据结构
-        ctx->packet_len = MQTTSerialize_connect(mqtt_send_buf, sizeof(mqtt_send_buf), &ctx->connect_data); // 将连接数据序列化到发送缓冲区中
-        if (ctx->packet_len <= 0 || transport_sendPacketBuffer(mqtt_sock, mqtt_send_buf, ctx->packet_len) != ctx->packet_len) // 如果发送缓冲区出错或者发送字节数与预期不符
-        {
-            transport_close(mqtt_sock);         // 关闭 TCP 会话
-            mqtt_sock = -1;                     // 重置套接字句柄
-            con_status = 0;                     // MQTT 置为未连接状态
-        }
-        else                                    // 成功发出了 CONNECT 报文
-        {
-            ctx->packet_len = MQTTPacket_read(mqtt_recv_buf, sizeof(mqtt_recv_buf), transport_getdata); // 读取服务器的回复到接收缓冲区中
-            if (ctx->packet_len > 0 && MQTTDeserialize_connack(&ctx->sessionPresent, &ctx->connack_rc, mqtt_recv_buf, ctx->packet_len)) // 如果读到数据并且能成功反序列化为 CONNACK 回复
-            {
-                if(ctx->connack_rc == MQTT_CONNECTION_ACCEPTED) // 分析返回码，如果服务端接受了连接
-                {
-                    printf("MQTT Connected!\r\n"); // 打印成功连接的日志
-                    con_status = 1;             // 标识已接通
-                    g_mqtt_connected = 1;       // 设置全局已连接标志
-                    ctx->backoff_ms = 1000;     // 重置退避重连周期基数为 1000ms
-                    ctx->next_retry_tick = 0;   // 清除重连定时
-                    ctx->last_rx_tick = now;    // 刷新最后一次收到数据的系统 Tick
-                    ctx->last_ping_tick = now;  // 刷新心跳包发送起点 Tick
-                    ctx->waiting_pingresp = 0;  // 清除等待 PINGRESP 回复标志
-                    ctx->subscribe_topic.cstring = MQTT_TOPIC_SUB; // 绑定要订阅的主题字符串
-                    int req_qos[1] = {0};       // 请求的 QoS 服务质量层级，设为 0
-                    ctx->packet_len = MQTTSerialize_subscribe(mqtt_send_buf, sizeof(mqtt_send_buf), 0, ctx->sub_packet_id++, 1, &ctx->subscribe_topic, req_qos); // 序列化订阅报文
-                    if (ctx->packet_len > 0)    // 序列化成功
-                    {
-                        transport_sendPacketBuffer(mqtt_sock, mqtt_send_buf, ctx->packet_len); // 发送订阅请求
-                        printf("MQTT Subscribe Sent.\r\n"); // 打印已发送订阅报文日志
-                    }
-                }
-                else                            // 如果服务端拒绝了连接要求
-                {
-                    // 加上这句打印，看看到底是什么原因被踢下线！
-                    printf("MQTT Connect Rejected by Server! RC=%d\r\n", ctx->connack_rc); // 打印被拒绝的原因状态码
-                    transport_close(mqtt_sock); // 对方拒绝则主动关闭传输层
-                    mqtt_sock = -1;             // 清除句柄资源
-                    con_status = 0;             // 标记脱机
-                    g_mqtt_connected = 0;       // 更新脱机全局标志
-                }
-            }
-            else // 读取超时或者接收包错误
-            {
-                printf("MQTT Receive CONNACK Timeout or Error!\r\n"); // 提示未获取到回应
-                transport_close(mqtt_sock);     // 关闭有异常底层的 socket
-                mqtt_sock = -1;                 // 重置套接字句柄
-                con_status = 0;                 // 标记脱机状态
-                g_mqtt_connected = 0;           // 清理连接全局位
-            }
-        }
-    }
-    if (!con_status && ctx->auto_reconnect)     // 如果当前确认断连且系统处于要求自动重连的工作模式
-    {
-        if (ctx->backoff_ms < ctx->max_backoff_ms) ctx->backoff_ms <<= 1; // 增加下一次测试的退避延时（指数级）
-        if (ctx->backoff_ms > ctx->max_backoff_ms) ctx->backoff_ms = ctx->max_backoff_ms; // 封顶上限不超 max_backoff_ms（32000毫秒）
-        ctx->next_retry_tick = now + pdMS_TO_TICKS(ctx->backoff_ms); // 核算出下一次进行新一轮尝试滴答事件的卡点数值
-    }
-    return (con_status && mqtt_sock >= 0) ? 1 : 0; // 最后统一返回当前到底是否已经连接上、底层连接正常与否
+    net_backoff_update(ctx, now);
+
+    return (net_state.connected && net_state.sock >= 0) ? 1 : 0;
 }
 
 /**
- * @brief       将离线/失败无法发出的数据缓存到外部 Flash
- * @param[in,out] ctx: 网络任务上下文指针，带有数据转换的缓存区
- * @note        此函数从 FreeRTOS 的传感器消息队列中获取数据，并在封装为 
- *              cJSON 字符串后安全压入环形 Flash 库内部。
+ * @brief       断网期间，把传感器数据打包成 JSON 存进 SPI Flash
+ * @param[in,out] ctx: 使用 ap_data 和 json_buf
+ * @note        从 MQTT 上报队列取数据（非阻塞），序列化后异步写入 Flash
  */
 static void net_cache_offline_data(NetTaskContext *ctx)
 {
-    while (xQueueReceive(xAP3216CQueueForMQTT, &ctx->ap_data, 0) == pdTRUE) // 取出队列中的传感器消息对象，如果不空则进入循环进行抽取
+    while (xQueueReceive(xAP3216CQueueForMQTT, &ctx->ap_data, 0) == pdTRUE) // 队列里有数据就取出处理
     {
-        cJSON *root = cJSON_CreateObject();     // 创建一个空的 JSON 根对象
-        cJSON_AddNumberToObject(root, "als", ctx->ap_data.als); // 将传感器环境光强度 als 加成一个对象节点
-        cJSON_AddNumberToObject(root, "ir", ctx->ap_data.ir);   // 追加红外 ir 参数结构节点于上节点平级的根基
-        cJSON_AddNumberToObject(root, "ps", ctx->ap_data.ps);   // 追加近距 ps 参数节点到同一个根目标体对象内部
-        if (cJSON_PrintPreallocated(root, ctx->json_buf, sizeof(ctx->json_buf), 0)) // 若把树转换打印序列化成字符输出至 buffer 成功无出界截断
+        cJSON *root = cJSON_CreateObject();
+        cJSON_AddNumberToObject(root, "als", ctx->ap_data.als);
+        cJSON_AddNumberToObject(root, "ir", ctx->ap_data.ir);
+        cJSON_AddNumberToObject(root, "ps", ctx->ap_data.ps);
+        if (cJSON_PrintPreallocated(root, ctx->json_buf, sizeof(ctx->json_buf), 0)) // 序列化成功才入库
         {
-            // 数据入库，启用离线存储（不再忽略）
-            flash_store_push_locked(ctx->json_buf, (uint16_t)strlen(ctx->json_buf)); // 使用上锁特性的保护措施压缓冲文体队列至 SPI FLASH 芯片内存储
-            ctx->cached_total++;                // 开机以来的缓存入存储芯片动作总数计数器递加（累加）记录
-            printf("Offline Data Cached To Flash! (cached_session_total=%lu, flash_pending=%lu)\r\n", 
-                   ctx->cached_total, flash_valid_count); // 打印缓存消息以及现有系统中一共有多少存底数据等待发出的统计
+            flash_store_push_async(ctx->json_buf, (uint16_t)strlen(ctx->json_buf)); // 异步写入，不阻塞本任务
+            ctx->cached_total++;
+            printf("[offline] stored=%lu pending=%lu\r\n",
+                   ctx->cached_total, flash_valid_count);
         }
-        cJSON_Delete(root);                     // 将刚才生成的 cJSON 链表结构在堆上销毁拆解清理、解绑内存条释放占用
+        cJSON_Delete(root); // 释放 cJSON 内存
     }
 }
 
 /**
- * @brief       重发存放在 Flash 中的过往因断网积压的数据记录
- * @param[in,out] ctx: 网络任务上下文，用其发报结构体缓冲区发包
- * @retval      uint8_t: 1 表示不需要重发或重发成功，可以做其他事情；0 表示由于链接失败断连导致重发中断。
- * @note        以 FIFO 先出模式取出记录投递，必须有真实 ACK 或顺利入 TCP 
- *              网络缓存才会将此条旧记录抹除以确保绝对传达到对端云服务。
+ * @brief       重连成功后，把断网期间积压在 Flash 里的数据补发到云端
+ * @param[in,out] ctx: 用 json_buf 读数据、mqtt_send_buf 发包
+ * @retval      1 = 无积压或补发完成；0 = 发送失败已断开连接
+ * @note        FIFO 取最旧一条；发送成功（写入 TCP 缓冲）后才标记已发送，保证不丢
  */
 static uint8_t net_publish_flash_backlog(NetTaskContext *ctx)
 {
-    // 屏蔽掉重传Flash存余数据的逻辑，直接返回1表示无滞留数据
-   // return 1;
-    
-    if (flash_valid_count == 0) return 1;       // 如果没有有效数据等待发送，则直接提早结束且报通过（1）
-    uint16_t cached_len = 0;                    // 先初始化用来寄存被捞数据内容本身字节长宽标尺变量
-    uint32_t pop_index = 0;                     // 将用来承载数据弹取头逻辑位号下标数字存储变量设定空档期原始基准 0
-    if (!flash_store_peek_locked(ctx->json_buf, sizeof(ctx->json_buf), &cached_len, &pop_index)) return 1; // 偷偷带锁探查窥视队列前端的字块并将实体倒送入缓存。若有毛病则放弃此轮试水回归正常常态。
-    printf("Read from Flash: len=%d, pending=%lu\r\n", cached_len, flash_valid_count); // 打入调试信息告诉使用者此刻从哪里拨拉出东西了，到底总数还有多大等待消化
-    MQTTString pub_topic = MQTTString_initializer; // 在代码内存当中清空设定好用于指向要刊发上送主题地址对象的字符串类型构件
-    pub_topic.cstring = MQTT_TOPIC_PUB;         // 用预先由 C 文件规定的对应设备 Publish 数据端点的常量字带赋值进去
+    if (flash_valid_count == 0) return 1; // 没有积压数据，直接通过
+    uint16_t cached_len = 0;
+    uint32_t pop_index = 0;
+    if (!flash_store_peek_async(ctx->json_buf, sizeof(ctx->json_buf), &cached_len, &pop_index)) return 1; // 读最旧一条（阻塞等 Flash 任务应答）
+    printf("[backlog] read len=%d pending=%lu\r\n", cached_len, flash_valid_count);
+    MQTTString pub_topic = MQTTString_initializer;
+    pub_topic.cstring = MQTT_TOPIC_PUB;
     ctx->packet_len = MQTTSerialize_publish(mqtt_send_buf, sizeof(mqtt_send_buf), 0, 0, 0, 0,
-                                            pub_topic, (unsigned char*)ctx->json_buf, cached_len); // 包装上端信息载体：整合 Topic、原始参数报文并进行网络适配转码打扁平，得出发送字宽
-    if (ctx->packet_len > 0)                    // 当序列化转化出成效宽带值不是负数异常后
+                                            pub_topic, (unsigned char*)ctx->json_buf, cached_len); // 打包成 MQTT Publish 报文
+    if (ctx->packet_len > 0)
     {
-        if (transport_sendPacketBuffer(mqtt_sock, mqtt_send_buf, ctx->packet_len) == ctx->packet_len) // 将组合包丢送给 tcp/套接驱动并且确认它成功吃进去所交代长度的实体封件以后进行肯定反馈流程分支
+        if (transport_sendPacketBuffer(net_state.sock, mqtt_send_buf, ctx->packet_len) == ctx->packet_len) // 写入 TCP 缓冲成功
         {
-            printf("Flash Data Sent OK (pending=%lu)\r\n", flash_valid_count); // 把投送捷报打到主控控制展示区表明工作成绩且公示结余剩余
-            flash_store_mark_sent_locked(pop_index); // 把那个已经被偷跑走并且已经确实传送到位的扇出条目标记成为“废止不用保留态”，实际上是完成销毁出队列效果流程
-            ctx->sent_total++;                  // 成功离线找补数据递交记录统计进行翻一加计计数
-            return 1;                           // 报告本函数完成了自己的使命宣告，主线程可往下做活
+            printf("[backlog] sent ok, pending=%lu\r\n", flash_valid_count);
+            flash_store_mark_sent_async(pop_index); // 发送成功才标记删除这条
+            ctx->sent_total++;
+            return 1;
         }
-        printf("Send Flash Data Failed!\r\n");  // 如果驱动不吃不给回面，只能断定底层有问题打出投送翻车警示词语
-        transport_close(mqtt_sock);             // 强制斩断现有因为卡壳的底层对接网络线路
-        mqtt_sock = -1;                         // 回收并将那个标识连上对接网络的符号句柄初始化置于原位，拔网线效果
-        con_status = 0;                         // 系统承认已经彻底失去网络交互资格的地位降格
-        g_mqtt_connected = 0;                   // 跟外界声明大连接已经倒掉彻底罢工
-        return 0;                               // 无奈向上给任务交一份未完成差事的中断退位票信条作为反馈交代
+        printf("Send Flash Data Failed!\r\n");
+        net_disconnect(ctx);
+        return 0;
     }
-    return 1;                                   // 假如仅仅是转化包装中出错就不强行拉闸切网，只退回报成功状态，寄希望下一个包件自身没事即可
-    
+    return 1; // 序列化失败（包太大等），不判死，下轮重试
 }
 
 /**
- * @brief       MQTT 心跳保活机制与超时检测步进函数
- * @param[in,out] ctx: 网络任务上下文指针，包含心跳状态和时间戳
- * @param[in]   now: 当前系统滴答时钟(Tick)时间
- * @note        采用动态心跳机制：只有当网络空闲（无下发数据）超过规定间隔时才发送 PINGREQ。
- *              发送后若在超时时间内未收到 PINGRESP，则判定为死连接，强制断开并触发重连。
+ * @brief       MQTT 心跳保活与断线检测（每轮主循环调用）
+ * @param[in,out] ctx: 心跳状态机（等待标志 + 时间戳）
+ * @param[in]   now: 当前系统滴答
+ * @note        动态心跳：空闲超过 5s 才发 PINGREQ；发出后 2s 无 PINGRESP 判死断开。
+ *              有业务数据收发时 last_rx_tick 会被刷新，自动不发心跳（省流量）。
  */
 static void net_keepalive_step(NetTaskContext *ctx, TickType_t now)
 {
-    if (!(con_status && mqtt_sock >= 0)) return; // 如果当前未连接或者 socket 无效，则不需要保活，直接返回
-    
-    if (ctx->waiting_pingresp) // 状态分支1：如果之前已经发了心跳请求包，目前正在等服务器回复
+    if (!(net_state.connected && net_state.sock >= 0)) return; // 未连接就不需要保活
+
+    if (ctx->waiting_pingresp) // 分支1：心跳已发出，正在等 PINGRESP
     {
-        if ((now - ctx->last_ping_tick) > ctx->ping_timeout_tick) // 校验等待时间：如果【当前时间 - 发心跳时间 > 超时容忍阈值(通常2秒)】
+        if ((now - ctx->last_ping_tick) > ctx->ping_timeout_tick) // 超过 2s 没收到回包 → 判死
         {
-            printf("MQTT Ping Timeout!\r\n");   // 认定为网络已掉线（假死），打印心跳超时告警
-            transport_close(mqtt_sock);         // 强制关闭底层 TCP socket 链接
-            mqtt_sock = -1;                     // 回收并重置 socket 句柄
-            con_status = 0;                     // 宣告 MQTT 连接业务层断开
-            ctx->waiting_pingresp = 0;          // 不再等待回包，复位标志位
-            g_mqtt_connected = 0;               // 同步清理对外全局变量声明的接通状态
-            ctx->wifi_rejoin_needed = 1;        // 怀疑是底层 Wi-Fi 断开引起，标记下一次需重扫/重连热点
-            ctx->wifi_retry_tick = now + pdMS_TO_TICKS(5000); // 退避 5 秒后再做恢复动作
+            printf("MQTT Ping Timeout!\r\n");
+            net_disconnect(ctx);
+            ctx->waiting_pingresp = 0;
+            net_mark_wifi_rejoin(ctx, now);
         }
     }
-    // 状态分支2：没有在等待回包（处于正常空闲状态），则判断空闲时间
-    // 为什么这样写？因为如果有业务数据收发，last_rx_tick会被刷新，这里就不会超限，可以省心跳流量（动态心跳机制）
-    else if ((now - ctx->last_rx_tick) > ctx->ping_interval_tick) 
+    // 分支2：没在等回包 → 看空闲时间是否超阈值
+    else if ((now - ctx->last_rx_tick) > ctx->ping_interval_tick)
     {
-        ctx->packet_len = MQTTSerialize_pingreq(mqtt_send_buf, sizeof(mqtt_send_buf)); // 开始组装 PINGREQ 请求封包放入发送缓存
-        if (ctx->packet_len > 0 && transport_sendPacketBuffer(mqtt_sock, mqtt_send_buf, ctx->packet_len) == ctx->packet_len) // 若封配合法，连同调用 TCP 顺利发出
+        ctx->packet_len = MQTTSerialize_pingreq(mqtt_send_buf, sizeof(mqtt_send_buf)); // 组装 PINGREQ
+        if (ctx->packet_len > 0 && transport_sendPacketBuffer(net_state.sock, mqtt_send_buf, ctx->packet_len) == ctx->packet_len) // 发送成功
         {
-            ctx->waiting_pingresp = 1; // 设置关卡锁扣：进入等服务器回填 PINGRESP 的状态
-            ctx->last_ping_tick = now; // 盖个时间戳：以此卡点为起跑线，开始计死线超时
+            ctx->waiting_pingresp = 1; // 进入等待回包状态
+            ctx->last_ping_tick = now;
         }
-        else // 如果序列化出毛病，或者刚要往底端打却发现 TCP 写不进了（可能已被对端断开或缓冲区死锁）
+        else // 心跳都发不出去 → TCP 已死，直接断开
         {
-            printf("MQTT Ping Send Failed!\r\n"); // 打印发心跳失败的提示
-            transport_close(mqtt_sock);           // 同样当做不可用处理，直接断开网络
-            mqtt_sock = -1;                       // 置空归位套接字
-            con_status = 0;                       // 下线 MQTT 会话
-            ctx->waiting_pingresp = 0;            // 复位等待标记
-            g_mqtt_connected = 0;                 // 关闭暴露给其它任务的连接位灯信
-            ctx->wifi_rejoin_needed = 1;          // 申请由 Wi-Fi 层从头开始重塑连接接驳
-            ctx->wifi_retry_tick = now + pdMS_TO_TICKS(5000); // 冷却5秒以防无限重试风暴引起看门狗死锁
+            printf("MQTT Ping Send Failed!\r\n");
+            net_disconnect(ctx);
+            ctx->waiting_pingresp = 0;
+            net_mark_wifi_rejoin(ctx, now);
         }
     }
 }
-// {
-//     "id": "123",
-//     "version": "1.0",
-//     "params": {
-//         "als": { "value": 123 },
-//         "ir": { "value": 45 },
-//         "ps": { "value": 6 }
-//     }
-// }
+
+/**
+ * @brief       把最新传感器数据实时上报到云端（OneNET 物模型格式）
+ * @param[in,out] ctx: 从队列取 ap_data，用 json_buf 序列化后发送
+ * @note        非阻塞取队列（50ms 超时）；发送失败则断开连接
+ */
 static void net_publish_realtime_data(NetTaskContext *ctx)
 {
     if (xQueueReceive(xAP3216CQueueForMQTT, &ctx->ap_data, pdMS_TO_TICKS(50)) != pdTRUE) return;
-    
-    // Create the OneNET standard 物模型 JSON object
+
+    // 拼 OneNET 物模型 JSON：{"id":"123","version":"1.0","params":{...}}
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "id", "123");
     cJSON_AddStringToObject(root, "version", "1.0");
-    
+
     cJSON *params = cJSON_CreateObject();
-    
-    // Add als
+
     cJSON *als_obj = cJSON_CreateObject();
     cJSON_AddNumberToObject(als_obj, "value", ctx->ap_data.als);
     cJSON_AddItemToObject(params, "als", als_obj);
-    
-    // Add ir
+
     cJSON *ir_obj = cJSON_CreateObject();
     cJSON_AddNumberToObject(ir_obj, "value", ctx->ap_data.ir);
     cJSON_AddItemToObject(params, "ir", ir_obj);
-    
-    // Add ps
+
     cJSON *ps_obj = cJSON_CreateObject();
     cJSON_AddNumberToObject(ps_obj, "value", ctx->ap_data.ps);
     cJSON_AddItemToObject(params, "ps", ps_obj);
-    
+
     cJSON_AddItemToObject(root, "params", params);
 
     if (!cJSON_PrintPreallocated(root, ctx->json_buf, sizeof(ctx->json_buf), 0))
@@ -400,7 +467,7 @@ static void net_publish_realtime_data(NetTaskContext *ctx)
                                             pub_topic, (unsigned char*)ctx->json_buf, strlen(ctx->json_buf));
     if (ctx->packet_len > 0)
     {
-        int sret = transport_sendPacketBuffer(mqtt_sock, mqtt_send_buf, ctx->packet_len);
+        int sret = transport_sendPacketBuffer(net_state.sock, mqtt_send_buf, ctx->packet_len);
         if (sret == ctx->packet_len)
         {
             printf("MQTT Pub AP3216C OK\r\n");
@@ -408,12 +475,9 @@ static void net_publish_realtime_data(NetTaskContext *ctx)
         else
         {
             printf("MQTT Pub Send Failed!\r\n");
-            if (con_status)
+            if (net_state.connected)
             {
-                transport_close(mqtt_sock);
-                mqtt_sock = -1;
-                con_status = 0;
-                g_mqtt_connected = 0;
+                net_disconnect(ctx);
             }
         }
     }
@@ -424,199 +488,203 @@ static void net_publish_realtime_data(NetTaskContext *ctx)
 }
 
 /**
- * @brief       接收并解析底端传来的 MQTT 报文数据
- * @param[in,out] ctx: 网络任务上下文指针，用于更新接收时间与等待状态
- * @param[in]   now:  当前系统滴答时钟时间
- * @note        以非阻塞方式读取网络下发的数据。负责处理可能出现的 TCP 粘包现象，
- *              并针对 PUBLISH（云端业务下发指令）、SUBACK（订阅完成返回）以及 
- *              PINGRESP（心跳返回）分类拆包与事件派发。
+ * @brief       接收并解析云平台下发的 MQTT 报文
+ * @param[in,out] ctx: 更新接收时间、等待标志，解析出 payload 交给业务处理
+ * @param[in]   now: 当前系统滴答
+ * @note        非阻塞读取。处理 TCP 粘包（一次收多包）；按类型分发：
+ *              PUBLISH（云下发指令）→ data_process_mqtt_msg 处理
+ *              SUBACK（订阅确认）、PINGRESP（心跳回复）→ 更新状态
  */
 static void net_receive_mqtt_packets(NetTaskContext *ctx, TickType_t now)
 {
-    // 非阻塞读取底层的网卡/TCP数据存储到接收缓冲区中，并获取真实收到的长度
+    // 非阻塞读一次 TCP 数据
     ctx->packet_len = transport_getdatanb(NULL, mqtt_recv_buf, sizeof(mqtt_recv_buf));
-    if (ctx->packet_len <= 0) return; // 如果没有数据到达，直接退出不浪费 CPU 资源
-    
-    ctx->last_rx_tick = now; // 只要收到了网络上的合法报文包，说明链路通畅，刷新底线保活计时器
-    int offset = 0;          // 定义游标偏移量，用于在接收数组里循环定位解析，防止一次收到多条“粘包”
-    
-    while (offset < ctx->packet_len) // 如果游标还没走到本次接收数据的末尾，说明还有包遗留未处理
+    if (ctx->packet_len <= 0) return; // 没数据直接退出
+
+    ctx->last_rx_tick = now; // 收到数据 = 链路活着，刷新保活计时
+    int offset = 0;          // 当前解析到缓冲区哪个位置（处理粘包）
+
+    while (offset < ctx->packet_len) // 还有没解析完的包就继续
     {
-        int rem_len = 0;     // MQTT 的变长剩余长度 (Remaining Length) 变量
-        int multiplier = 1;  // MQTT 变长编码的乘数
-        int i = 1;           // 游标本地索引，跳过固定报头所在的第 0 字节，从剩余长度字节开始
-        int packet_len = 0;  // 记录“当前正在解析的这一个单包”的整体实际长宽
-        unsigned char* curr_buf = mqtt_recv_buf + offset; // 指针指向当前单包开始处的地址
-        
-        if (ctx->packet_len - offset < 2) break; // 如果剩余没处理的长度低于 2 个字节，构不成最小 MQTT 包也无法解析，强跳出
-        
-        // 此 Do-While 循环是 MQTT 取 Remaining Length (变长计算) 官方算法
-        // 每个字节的高位(bit 7)用作延续位，低7位用作数值存放
+        int rem_len = 0;     // MQTT 剩余长度（变长编码）
+        int multiplier = 1;  // 变长编码乘数
+        int i = 1;           // 从第 1 字节开始读剩余长度（跳过第 0 字节的类型头）
+        int packet_len = 0;  // 当前这一个包的总长度
+        unsigned char* curr_buf = mqtt_recv_buf + offset; // 指向当前包起点
+
+        if (ctx->packet_len - offset < 2) break; // 剩余不足一个最小包（2 字节），等下次
+
+        // MQTT 剩余长度变长编码算法：每个字节 bit7 是延续位，低 7 位是数值
         do {
-            if (i >= (ctx->packet_len - offset)) { packet_len = 0; break; } // 拿到的包裹被截断，包体不完整
-            unsigned char c = curr_buf[i++];   // 提取长度表示字节
-            rem_len += (c & 127) * multiplier; // 抹除最高位得出当前数位上的真实权重增加
-            multiplier *= 128;                 // 权值的基向上提升进位
-            if (multiplier > 2097152) { packet_len = 0; break; } // 数据包超出了MQTT规格极大值，包存在破坏
-            if ((c & 128) == 0) {              // 当读出此字节最高位为0，说明这个长度定义到此终结了
-                packet_len = i + rem_len;      // 当前单包总长 = 消耗的报头字节(i) + 真实净荷长度(rem_len)
+            if (i >= (ctx->packet_len - offset)) { packet_len = 0; break; } // 数据被截断，包不完整
+            unsigned char c = curr_buf[i++];
+            rem_len += (c & 127) * multiplier;
+            multiplier *= 128;
+            if (multiplier > 2097152) { packet_len = 0; break; } // 超过 MQTT 最大长度，数据损坏
+            if ((c & 128) == 0) { // 延续位为 0 = 长度编码结束
+                packet_len = i + rem_len; // 包总长 = 头部长度 + 剩余长度
                 break;
             }
         } while (1);
-        
-        if (packet_len <= 0 || packet_len > (ctx->packet_len - offset)) break; // 单体过长或异常说明当前包没收全(TCP粘包分片)，留在下一次接续
-        
-        // 尝试按照 Publish(应用云端下指令) 格式将其反序列化提取数据
+
+        if (packet_len <= 0 || packet_len > (ctx->packet_len - offset)) break; // 包没收全（粘包分片），留在下次
+
+        // 尝试按 PUBLISH（云下发指令）解析
         if (MQTTDeserialize_publish(&ctx->dup, &ctx->qos, &ctx->retained, &ctx->packet_id, &ctx->topic_string,
                                     &ctx->payload, &ctx->payload_len, curr_buf, packet_len))
         {
-            // 如果解析通过，说明收到了服务器的数据命令推送，顺带用 printf 展示
             printf("MQTT Recv: Topic=%.*s, Payload=%.*s\r\n",
                    ctx->topic_string.lenstring.len, ctx->topic_string.lenstring.data,
                    ctx->payload_len, ctx->payload);
-                   
-            // 投递进入专门分离出来的业务解析中心(进行 cJSON 破冰拆解及控制外设)
+
+            // 交给业务层处理（解析 JSON、控制外设、触发 OTA）
             data_process_mqtt_msg(ctx->payload, ctx->payload_len);
-            
-            // 对通信质量做反馈：若协议要求强回应 QoS > 0，则回复告知服务器已收到 (PUBACK)
+
+            // QoS > 0 时需要回复 PUBACK 确认收到
             if (ctx->qos > 0)
             {
                 int ack_len = MQTTSerialize_ack(mqtt_send_buf, sizeof(mqtt_send_buf), PUBACK, 0, ctx->packet_id);
-                if (ack_len > 0) transport_sendPacketBuffer(mqtt_sock, mqtt_send_buf, ack_len);
+                if (ack_len > 0) transport_sendPacketBuffer(net_state.sock, mqtt_send_buf, ack_len);
             }
         }
-        // 如果不是云端发的数据，试着解析是不是上次提交 Sub(订阅意向) 后的接纳认证回复报文
+        // 不是 PUBLISH，试试是不是 SUBACK（订阅确认）
         else if (MQTTDeserialize_suback(&ctx->packet_id, 1, &ctx->sub_count, ctx->granted_qos, curr_buf, packet_len))
         {
-            printf("MQTT Subscribe ACK Received.\r\n"); // 收到订阅的准许反馈
+            printf("MQTT Subscribe ACK Received.\r\n");
         }
-        else 
+        else
         {
-            // 对于其它类型（非下发、非Sub回信），做个更底层的控制码探照分类
-            uint8_t pkt_type = curr_buf[0] >> 4; // MQTT报文种类的代号都在第一个 Byte 的高四位(移位提取)
-            
-            if (pkt_type == 13) {                // type 13 就是 0x0D -> 这正是 PINGRESP！！ 
-                ctx->waiting_pingresp = 0;       // 关闭心跳遗失红色警报！说明心跳圆满闭环，链接健康
-                ctx->last_rx_tick = now;         // 重置基准时钟，给下次长周期超时计时打提前量
-            } else if (pkt_type == 9) {          // type 9 = 0x09 为 SUBACK 的兜底确认识别
+            // 其它类型：看首字节高 4 位区分报文类型
+            uint8_t pkt_type = curr_buf[0] >> 4;
+
+            if (pkt_type == 13) { // 0x0D = PINGRESP，心跳回复 → 闭环
+                ctx->waiting_pingresp = 0;
+                ctx->last_rx_tick = now;
+            } else if (pkt_type == 9) { // 0x09 = SUBACK 兜底
                 printf("MQTT SUBACK Received\r\n");
             } else {
-                printf("MQTT RX Ignored (Type=%d, Len=%d)\r\n", pkt_type, packet_len); // 其他例如 PUBACK（发数据回应）先放过不管
+                printf("MQTT RX Ignored (Type=%d, Len=%d)\r\n", pkt_type, packet_len); // 其它（如 PUBACK）先忽略
             }
         }
-        offset += packet_len; // 游标朝后挪动一包的距离。继续在 While 循环里解析 TCP 缓冲区可能多合一挂载过来的下一个短包
+        offset += packet_len; // 跳到下一个包
     }
 }
 
 /**
- * @brief       处理来自底层透传模块 (ATK_MW8266D) 的 UART 异步数据包
- * @param[in,out] ctx: 网络任务上下文指针，用于携带解析包长及数据体
- * @note        以非阻塞的方式监听 UART 队列，当发现有模块返回或透传
- *              的其他非标消息时获取并做后期业务切分。
+ * @brief       处理 ESP8266 透传出来的非 MQTT 数据（AT 响应等）
+ * @param[in,out] ctx: 接收 rx_len 和 uart_buf
+ * @note        非阻塞取 UART 队列；目前只打印，不做业务处理
  */
 static void net_handle_uart_rx(NetTaskContext *ctx)
 {
-    // 探测队列：如果在该队列(xUartRxQueue)没有等到消息立马返回，绝不阻塞 MQTT 主轴心骨
-    if (xQueueReceive(xUartRxQueue, &ctx->rx_len, 0) != pdTRUE) return;
-    
-    // 经过上一句保证队里有货后，提取底层的满帧指针串
+    if (xQueueReceive(xUartRxQueue, &ctx->rx_len, 0) != pdTRUE) return; // 没消息立即返回，不阻塞
+
     ctx->uart_buf = atk_mw8266d_uart_rx_get_frame();
-    
-    // 双重保险验证提取出的货并不是无效空指针
+
     if (ctx->uart_buf != NULL)
     {
-        printf("UART Msg: %s", ctx->uart_buf); // 通过调试串口打印出收到的未知/底层信息
+        printf("UART Msg: %s", ctx->uart_buf); // 打印收到的底层信息
 
-        // 【保留接口】后续可在此处挂载针对特定 UART 数据的解析器(例如 AT 响应或特殊传感器分包)
-        // data_process_uart_msg(ctx->uart_buf, ctx->rx_len);
-
-        // 重启清空底层串口驱动的接收 DMA或状态机，放行下一波 UART 中断大流进站
-        atk_mw8266d_uart_rx_restart(); 
+        // 重启 UART 接收，放行下一批数据
+        atk_mw8266d_uart_rx_restart();
     }
 }
 
 /**
- * @brief       FreeRTOS 网络核心大循环任务入口 (The Network Task Thread)
- * @param[in]   pv: FreeRTOS 要求的参数座（通常填 NULL，此处未使用）
- * @note        由于担负着最高层级的外联互动，这是一个拥有绝对统筹权的长时轮询任务。
- *              内部包含了：看门狗喂狗、按键下探、OTA分发、连接试探维持、
- *              Flash离线滞留上报、动态心跳保卫、实时传感器采集上报与网卡数据接收调度。
+ * @brief       执行 OTA 升级流程（由 net_task 主循环在 g_ota_request 置位时调用）
+ * @param[in,out] ctx: 断开 MQTT 连接时使用
+ * @note        升级期间暂停本任务的看门狗喂狗位，防止升级耗时长被误复位。
+ *              成功升级会内部重启系统；失败则恢复喂狗并继续正常流程。
+ */
+static void net_handle_ota(NetTaskContext *ctx)
+{
+    printf("Enter OTA , stop NET watchdog assessment to avoid miskill...\r\n");
+
+    extern volatile uint32_t wd_expected_mask;
+    taskENTER_CRITICAL();
+    wd_expected_mask &= ~WD_BIT_NET; // 升级期间不要求本任务喂狗
+    taskEXIT_CRITICAL();
+
+    // 退出透传模式，断开 MQTT，让资源让位给 HTTP 下载
+    printf("Exiting MQTT transparent mode for OTA...\r\n");
+    atk_mw8266d_exit_unvarnished();
+    net_disconnect(ctx);
+
+    // 阻塞执行 OTA 升级（成功后内部会重启系统）
+    OTA_ProcessUpgrade();
+
+    // 能跑到这里 = OTA 失败或取消，恢复喂狗并继续正常流程
+    taskENTER_CRITICAL();
+    wd_expected_mask |= WD_BIT_NET;
+    taskEXIT_CRITICAL();
+
+    g_ota_request = 0;
+    printf("OTA Failed. Core reset Net Request. Reconnecting to MQTT...\r\n");
+}
+
+/**
+ * @brief       FreeRTOS 网络任务主循环
+ * @param[in]   pv: 任务参数（未使用）
+ * @note        每轮循环依次执行：喂狗、按键、统计、OTA、重连、缓存离线数据、
+ *              补发积压数据、心跳保活、实时上报、收包解析、UART 旁路处理
  */
 void net_task(void *pv)
 {
-    NetTaskContext ctx;    // 在此任务独立栈里开辟一个大结构体变量作为其本任务唯一操作主干
-    net_ctx_init(&ctx);    // 进行第一次全面洗地重置和默认参数的设定起航
+    NetTaskContext ctx;  // 任务私有上下文（栈上分配）
+    net_ctx_init(&ctx);  // 初始化默认参数
 
-    // 无穷大轮询，因为是线程，绝对不能 return 或 break 到头
     while (1)
     {
-        // 1. 系统底层保活篇：用本任务的生命给系统主看门狗点赞，证明网络线程没死锁卡毙
+        // 1. 喂看门狗：证明本任务还活着
         wd_heartbeat(WD_BIT_NET);
-         
-        // 2. 环境感知篇：抓取当前最新物理按键的状态，0号位无阻塞读取
-        ctx.key = KEY_Scan(0);
-        
-        // 记录一下当下起跑发车的系统滴答刻度（毫秒级对账基准）
-        TickType_t now = xTaskGetTickCount();
-        
-        uint8_t request_connect = 0; // 单次循环里的强制连接申诉旗，默认放下
 
-        // 3. 例行杂务篇：每隔5秒上报一次开机以来的统计信息
+        // 2. 读按键状态（非阻塞）
+        ctx.key = KEY_Scan(0);
+
+        TickType_t now = xTaskGetTickCount(); // 当前系统滴答
+
+        uint8_t request_connect = 0; // 按键请求强制连接标志
+
+        // 3. 每 5 秒打印一次统计
         net_print_stats(&ctx, now);
-        
-        // 4. 用户交互篇：看刚才采集到的按键有没有在针对本任务发号施令（开启重连 or 强杀连接）
+
+        // 4. 处理按键（连接/断开）
         net_handle_key(&ctx, now, &request_connect);
 
-        // 5. 紧急高优打断篇：系统触发了 OTA 的全面升级诉求
-        if (g_ota_request)
+        // 5. 有 OTA 请求 → 执行升级（期间暂停本任务喂狗，防止误复位）
+        // if (g_ota_request)
+        // {
+        //     net_handle_ota(&ctx);
+        // }
+
+        // 6. 未连接则尝试连接（WiFi + TCP + MQTT，带退避）
+        if (!net_try_connect(&ctx, now, request_connect)) // 连接不成功
         {
-            if (mqtt_sock >= 0 && con_status) // 在开启空中升级前若自己还有连着老网，为了安全起见必须得“先下线"
-            {
-                ctx.packet_len = MQTTSerialize_disconnect(mqtt_send_buf, sizeof(mqtt_send_buf)); // 打包分手辞别信
-                if (ctx.packet_len > 0)
-                {
-                    transport_sendPacketBuffer(mqtt_sock, mqtt_send_buf, ctx.packet_len); // 送达服务器请求正规解约
-                }
-                transport_close(mqtt_sock);       // 断开TCP通道
-                mqtt_sock = -1;                   // 清空凭证
-                con_status = 0;                   // 网络挂失
-                g_mqtt_connected = 0;             // 跨任务标志下线
-            }
-            g_ota_request = 0;                    // 吃掉OTA旗帜，表明我看见了并正在做
-            OTA_ProcessUpgrade();                 // 启动庞大、耗时的代码刷写重加载机制
-            ctx.next_retry_tick = now + pdMS_TO_TICKS(1000); // 如果OTA意外弹回了，冷却 1000ms 后再准许网络业务找回
-            vTaskDelay(pdMS_TO_TICKS(20));        // 放弃自身CPU算力交出控制权片刻 为啥？
-            continue;                             // 放弃当前圈剩下所有未执行步骤，重新进站检查
+            net_cache_offline_data(&ctx);  // 断网期间：传感器数据存 Flash
+            vTaskDelay(pdMS_TO_TICKS(10));
+            continue; // 未连上，跳过下面的收发逻辑
         }
 
-        // 6. 网络拓扑接入篇：不断试探直到获取合法 MQTT Socket（重连退避算法包在内了）
-        if (!net_try_connect(&ctx, now, request_connect)) // 如果本趟还是没能连通（如WiFi挂了或者退避中）
+        // 7. 已连上：先把 Flash 里积压的离线数据补发完
+        if (!net_publish_flash_backlog(&ctx)) // 补发时断线了
         {
-            net_cache_offline_data(&ctx);         // 调用应急方案：这段时间有新传感器数据的话，直接存外部 SPI FLASH 当存底
-            vTaskDelay(pdMS_TO_TICKS(10));        // 不能硬转圈烧 CPU，小睡 10 个系统滴答
-            continue;                             // 在没拿到网络资格证之前，下面所有的上传、收信逻辑一概不应该进入
+            vTaskDelay(pdMS_TO_TICKS(10));
+            continue; // 回到重连流程
         }
 
-        // 7. 离线数据回补/消化篇：网络既已通畅，先问Flash要陈年旧账发回天上
-        if (!net_publish_flash_backlog(&ctx))     // 如果补发出了网络事故被强制退回（底端TCP断掉）
-        {
-            vTaskDelay(pdMS_TO_TICKS(10));        // 交出CPU切手
-            continue;                             // 当前回合必须停止所有后备操作，重新进行下一轮尝试连网逻辑
-        }
-
-        // 8. 恒定状态维护篇：没有历史包袱的情况下，看看现在离上一次云端发话隔了多久，久了就上心脏激活起搏器
+        // 8. 心跳保活 + 断线检测
         net_keepalive_step(&ctx, now);
-        
-        // 9. 现充数据上报篇：检查有没有即时的当前时间片传来的传感器环境数据，拿来格式化发布出去
+
+        // 9. 有新的传感器数据 → 实时上报
         net_publish_realtime_data(&ctx);
-        
-        // 10. 远端数据拆取篇：听云服务的话，把下达的控制单、回传报等解析处理落实在本地
+
+        // 10. 接收并解析云平台下发的报文
         net_receive_mqtt_packets(&ctx, now);
-        
-        // 11. 透传/指令旁路篇：拾取串口剩余不知名帧碎片
+
+        // 11. 处理 ESP8266 透传的非 MQTT 数据
         net_handle_uart_rx(&ctx);
-        
-        // 完美过关结束当前轮次，小延时防资源独霸卡死低优任务
+
+        // 每轮小延时，让出 CPU 给低优先级任务
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }

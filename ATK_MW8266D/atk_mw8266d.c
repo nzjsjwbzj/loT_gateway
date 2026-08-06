@@ -714,7 +714,7 @@ uint8_t atk_mw8266d_ping(char *ip)
 void wifi_net_init(char *ssid, char *pwd,char *ip_buf)
 {
     uint8_t ret;
-    printf("正在初始化 WiFi...\r\n");
+    printf("initializing WiFi...\r\n");
 
     /* 初始化 ATK-MW8266D WiFi 模块 */
     ret = atk_mw8266d_init(115200);
@@ -737,7 +737,7 @@ void wifi_net_init(char *ssid, char *pwd,char *ip_buf)
         }
     }
     
-    printf("正在连接路由器 AP...\r\n");
+    printf("connecting AP...\r\n");
     ret  = atk_mw8266d_restore();                               /* 恢复出厂设置 */
     ret += atk_mw8266d_at_test();                               /* AT 指令测试 */
     ret += atk_mw8266d_set_mode(1);                             /* 设置为 Station 模式 */
@@ -747,7 +747,7 @@ void wifi_net_init(char *ssid, char *pwd,char *ip_buf)
     ret += atk_mw8266d_get_ip(ip_buf);                          /* 获取分配到的 IP 地址 */
     if (ret != 0)
     {
-        printf("连接目标 AP 失败!\r\n");
+        printf("connecting AP failed!\r\n");
         while (1)
         {
             LED0=!LED0;

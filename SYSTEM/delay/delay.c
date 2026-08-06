@@ -22,7 +22,7 @@
 //修改说明
 ////////////////////////////////////////////////////////////////////////////////// 
 
-static u32 fac_us=0;							//us延时倍乘数
+static u32 fac_us=0;							//us延时倍乘数  fac_us 是每 1 微秒对应的时钟节拍数
 
 #if SYSTEM_SUPPORT_OS		
     static u16 fac_ms=0;				        //ms延时倍乘数,在os下,代表每个节拍的ms数
@@ -49,7 +49,7 @@ void delay_init(u8 SYSCLK)
 
 	u32 reload;
     HAL_SYSTICK_CLKSourceConfig(SYSTICK_CLKSOURCE_HCLK);//SysTick频率为HCLK
-	fac_us=SYSCLK;						    //不论是否使用OS,fac_us都需要使用
+	fac_us=SYSCLK;						    //不论是否使用OS,fac_us都需要使用  fac_us 是每 1 微秒对应的时钟节拍数
 	reload=SYSCLK;					        //每秒钟的计数次数 单位为K	   
 	reload*=1000000/configTICK_RATE_HZ;		//根据configTICK_RATE_HZ设定溢出时间
 											//reload为24位寄存器,最大值:16777216,在180M下,约合0.745s左右	

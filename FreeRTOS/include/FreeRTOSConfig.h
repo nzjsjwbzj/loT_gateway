@@ -97,7 +97,7 @@
 #define configMAX_PRIORITIES					(32)                    // 操作系统支持的最大优先级数量 0 ~ 31
 #define configMINIMAL_STACK_SIZE				((unsigned short)130)   // 空闲任务分配的最小堆栈大小 (字，非字节)
 #define configMAX_TASK_NAME_LEN					(16)                    // 任务名称字符串最大长度
-
+  
 #define configUSE_16_BIT_TICKS					0                       // 0: 使用 32 位的 Tick 计数器，防止系统运行 49 天后溢出
 #define configIDLE_SHOULD_YIELD					1                       // 1: 空闲任务遇到同优先级任务时主动让出 CPU
 #define configUSE_TASK_NOTIFICATIONS            1                       // 1: 开启直接任务通知功能 (轻量级信号量)

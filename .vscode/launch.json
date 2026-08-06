@@ -8,8 +8,8 @@
       "args": [],
       "stopAtEntry": false,
       "externalConsole": true,
-      "cwd": "e:/MCU_code/F429IGT6/loT_gateway/SYSTEM/delay",
-      "program": "e:/MCU_code/F429IGT6/loT_gateway/SYSTEM/delay/build/Debug/outDebug",
+      "cwd": "e:/MCU_code/F429IGT6/IoT_gateway",
+      "program": "e:/MCU_code/F429IGT6/IoT_gateway/build/Debug/outDebug",
       "MIMode": "gdb",
       "miDebuggerPath": "gdb",
       "setupCommands": [

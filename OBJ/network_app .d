@@ -97,6 +97,8 @@
 ..\obj\network_app .o: ..\FreeRTOS\include\queue.h
 ..\obj\network_app .o: ..\FreeRTOS\include\semphr.h
 ..\obj\network_app .o: ..\APP\Sensor_APP\sensor_app.h
+..\obj\network_app .o: ..\HARDWARE\AP3216C\ap3216c.h
+..\obj\network_app .o: ..\HARDWARE\DHT11\dht11.h
 ..\obj\network_app .o: ..\APP\SPI_FLASH_APP\store_flash.h
 ..\obj\network_app .o: ..\APP\WDOG_APP\wdog.h
 ..\obj\network_app .o: ..\PROTOCOL\protocol_onenet.h
@@ -104,3 +106,5 @@
 ..\obj\network_app .o: ..\HARDWARE\KEY\key.h
 ..\obj\network_app .o: ..\ATK_MW8266D\atk_mw8266d_uart.h
 ..\obj\network_app .o: ..\ATK_MW8266D\atk_mw8266d.h
+..\obj\network_app .o: ..\OTA\ota.h
+..\obj\network_app .o: ..\SYSTEM\delay\delay.h

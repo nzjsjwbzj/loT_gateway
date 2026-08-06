@@ -3,165 +3,208 @@
 #include <stdio.h>
 #include <string.h>
 
-/** 读游标：指向下一个有效待发送数据所在的逻辑索引 */
-uint32_t flash_read_index = 0;
-/** 写游标：指向下一个可用的空位逻辑索引 */
-uint32_t flash_write_index = 0;
-/** 有效数据总数：当前 Flash 存储的未发送有效传感数据量 */
-uint32_t flash_valid_count = 0;
-/** 硬件就绪标志：1 表示 SPI Flash 正常可用 */
-uint8_t flash_ready = 1;
+/* ====================================================================
+ * 全局状态变量
+ * ==================================================================== */
+uint32_t flash_read_index  = 0;   // 读游标：下一个待发送的有效数据
+uint32_t flash_write_index = 0;   // 写游标：下一个可用的空位
+uint32_t flash_valid_count = 0;   // 有效未发送数据计数
+uint8_t  flash_ready        = 1;  // Flash 芯片是否可用
+uint32_t g_flash_seq        = 0;  // 全局递增序列号
 
-/**
- * @brief       根据逻辑索引计算其对应数据在 Flash 中的真实物理地址
- * @param       index: 数据的逻辑索引 (0 ~ FLASH_RECORD_COUNT-1)
- * @retval      Flash 绝对物理地址
- */
+QueueHandle_t xFlashReqQueue = NULL;  // Flash 请求队列
+
+// PEEK 同步：记录当前等待应答的任务句柄（仅 net_task 调用 peek，不存在并发）
+static TaskHandle_t g_peek_caller = NULL;
+
+/* ====================================================================
+ * 内部工具函数
+ * ==================================================================== */
+
 static uint32_t flash_record_addr(uint32_t index)
 {
     return FLASH_DATA_START + (index * FLASH_RECORD_SIZE);
 }
 
-/**
- * @brief       设备重启上电时扫描 Flash，寻找读写游标、统计尚存多少条未上传的离线数据
- *              扫描过程中会确定第一个有效数据所在的位置 (供发送用) 
- *              以及第一个空闲/已发送位置 (供存储新数据用)
- */
-static void flash_store_rescan(void) 
-{
-    uint8_t flag = 0;
-    uint32_t first_empty = 0xFFFFFFFF;
-    uint32_t first_valid = 0xFFFFFFFF;
-    uint32_t valid_count = 0;  // 临时变量，先计算有多少条有效数据
-    
-    // ✅ 第一遍扫描：遍历所有的 Block，统计有效数据并寻找环形队列首尾的关键位置
-    for (uint32_t i = 0; i < FLASH_RECORD_COUNT; i++)
-    {
-        W25QXX_Read(&flag, flash_record_addr(i), 1);
-        
-        // 遇到有效数据包 0xA5
-        if (flag == FLASH_FLAG_VALID)
-        {
-            valid_count++;
-            if (first_valid == 0xFFFFFFFF) first_valid = i; // 记录最前面一条有效数据位置
-        }
-        
-        // 遇到空块(0xFF)或被标记已发送作废的块(0x00)
-        if ((flag == FLASH_FLAG_EMPTY || flag == FLASH_FLAG_SENT) && first_empty == 0xFFFFFFFF)
-        {
-            first_empty = i; // 记录最前面可以写入存放新数据的位置
-        }
-    }
-    
-    flash_valid_count = valid_count;  // 设置全局最终的计数
-    
-    if (first_valid == 0xFFFFFFFF)
-    {
-        // 若找不到有效数据，说明 Flash 是全空的（或者全是被打上已发送标签作废的）
-        flash_read_index = (first_empty == 0xFFFFFFFF) ? 0 : first_empty;
-        flash_write_index = flash_read_index;
-        printf("DEBUG flash_store_rescan: EMPTY (first_empty=%lu)\r\n", first_empty);
-    }
-    else
-    {
-        // 存在历史有效断网数据，需要恢复续传
-        flash_read_index = first_valid;  // 读指针指到最老的那条有效数据上
-        flash_write_index = (first_empty == 0xFFFFFFFF) ? first_valid : first_empty; 
-        printf("DEBUG flash_store_rescan: first_valid=%lu, first_empty=%lu, valid_count=%lu\r\n",
-               first_valid, first_empty, valid_count);
-    }
-}
-
-/**
- * @brief       强制清空离线存储所分配的全部 Flash 扇区
- *              只有当 Flash 数据由于各种原因整体损毁混乱时才调用
- */
-static void flash_store_format(void)
-{
-    if (!flash_ready) return;
-    
-    printf("DEBUG: Formatting Flash (erasing all sectors)...\r\n");
-    
-    // 挨个擦除所划分的数据存储区内的所有 Flash Sector（W25QXX最小擦除单位为4KB扇区）
-    for (uint32_t sector = 0; sector < (FLASH_DATA_SIZE / FLASH_SECTOR_SIZE); sector++)
-    {
-        uint32_t addr = FLASH_DATA_START + sector * FLASH_SECTOR_SIZE;
-        // W25QXX API 的擦除粒度通常传的是扇区编号（这里做绝对物理地址到扇区号的换算）
-        W25QXX_Erase_Sector((addr - FLASH_DATA_START) / FLASH_SECTOR_SIZE);
-        
-        if ((sector + 1) % 64 == 0)
-        {
-            printf("  Erased %lu sectors...\r\n", sector + 1); // 擦除进度打印
-        }
-    }
-    
-    printf("DEBUG: Flash format complete!\r\n");
-    
-    // 格式化完成，复原重置所有索引计数指针
-    flash_read_index = 0;
-    flash_write_index = 0;
-    flash_valid_count = 0;
-}
-
-/**
- * @brief       模块初始化入口。验证 Flash 分区健康度并尝试恢复存储索引
- */
-void flash_store_init(void)
-{
-    if (!flash_ready)
-    {
-        // 无外设可用时，全部清 0
-        flash_read_index = 0;
-        flash_write_index = 0;
-        flash_valid_count = 0;
-        return;
-    }
-    
-    // 快速读取存储区最开头的第一个数据标志位，检测是否面临首次用或坏区
-    uint8_t first_flag = 0xFF;
-    W25QXX_Read(&first_flag, FLASH_DATA_START, 1);
-    
-    // 如果第一个位置既不是 0xFF（空），也不是 0xA5（有效），也不是 0x00（已发送作废）
-    // 说明 Flash 内保存的标记完全是异常乱码数据，极有可能发生了大范围错位或者未初始化，直接格式化
-    if (first_flag != FLASH_FLAG_EMPTY && first_flag != FLASH_FLAG_VALID && first_flag != FLASH_FLAG_SENT)
-    {
-        printf("DEBUG: Flash appears corrupted (first_flag=0x%02X), formatting...\r\n", first_flag);
-        flash_store_format();
-        return;
-    }
-    
-    // 数据看着正常，进行全盘扫描以构建环形链表的读写指针映射
-    flash_store_rescan();
-    printf("Flash Init Done: read_idx=%lu, write_idx=%lu, valid_count=%lu\r\n",
-           flash_read_index, flash_write_index, flash_valid_count);
-}
-
-/**
- * @brief       针对包含某条记录逻辑索引的 4KB 物理扇区进行擦除
- * @param       index: 此条记录对应的逻辑索引
- */
 static void flash_store_erase_sector(uint32_t index)
 {
     if (!flash_ready) return;
     uint32_t sector_index = (index / FLASH_RECORDS_PER_SECTOR);
-    uint32_t sector_addr = FLASH_DATA_START + sector_index * FLASH_SECTOR_SIZE;
-    W25QXX_Erase_Sector((sector_addr - FLASH_DATA_START) / FLASH_SECTOR_SIZE);
+    uint32_t base_sector   = FLASH_DATA_START / FLASH_SECTOR_SIZE;
+    W25QXX_Erase_Sector(base_sector + sector_index);
 }
 
-/**
- * @brief       将一条新的 JSON 字符串断网数据存入 Flash 环形队列中
- * @param       data: 指向字符串的指针
- * @param       len: 字符串的长度
- */
+/* ====================================================================
+ * 断电恢复：上电扫描 Flash 重建读写指针
+ * 通过 seq 字段确定数据写入先后顺序，而非依赖物理地址
+ * ==================================================================== */
+static void flash_store_rescan(void)
+{
+    uint8_t  flag            = 0;
+    uint32_t first_empty     = 0xFFFFFFFF;
+    uint32_t valid_count     = 0;
+    uint32_t min_seq         = 0xFFFFFFFF;
+    uint32_t min_seq_index   = 0xFFFFFFFF;
+    uint32_t max_seq         = 0;
+    uint32_t max_seq_index   = 0xFFFFFFFF;
+
+    // 调试：统计异常 flag（既非 EMPTY 也非 VALID 也非 SENT 的值）
+    uint32_t abnormal_count = 0;
+    uint8_t  abnormal_flags[8];
+    uint32_t abnormal_idx[8];
+    uint32_t abnormal_n = 0;
+
+    for (uint32_t i = 0; i < FLASH_RECORD_COUNT; i++)
+    {
+        W25QXX_Read(&flag, flash_record_addr(i), 1);
+
+        if (flag == FLASH_FLAG_VALID)
+        {
+            valid_count++;
+
+            uint8_t seq_bytes[4];
+            W25QXX_Read(seq_bytes, flash_record_addr(i) + 1, 4);
+            uint32_t seq = (uint32_t)seq_bytes[0]
+                         | ((uint32_t)seq_bytes[1] << 8)
+                         | ((uint32_t)seq_bytes[2] << 16)
+                         | ((uint32_t)seq_bytes[3] << 24);
+
+            if (seq < min_seq) { min_seq = seq; min_seq_index = i; }//遍历4096个页面，找到A6里面，时间戳最小的那个A6的位置
+            if (seq > max_seq) { max_seq = seq; max_seq_index = i; }//遍历4096个页面，找到A6里面，时间戳最大的那个A6的位置
+        }
+        else if (flag != FLASH_FLAG_EMPTY && flag != FLASH_FLAG_SENT)
+        {
+            // 异常 flag：不是 0xFF/0xA6/0x00 的任何值（如 0x13、0x5A）
+            abnormal_count++;
+            if (abnormal_n < 8)
+            {
+                abnormal_flags[abnormal_n] = flag;
+                abnormal_idx[abnormal_n]   = i;
+                abnormal_n++;
+            }
+        }
+
+        if ((flag == FLASH_FLAG_EMPTY || flag == FLASH_FLAG_SENT) && first_empty == 0xFFFFFFFF)
+        {
+            first_empty = i;
+        }
+    }
+
+    flash_valid_count = valid_count;
+
+    // 调试：打印异常 flag 的数量和前 8 个的位置/值
+    if (abnormal_count > 0)
+    {
+        printf("DEBUG rescan: abnormal_flags=%lu\r\n", (unsigned long)abnormal_count);
+        for (uint32_t k = 0; k < abnormal_n; k++)
+        {
+            printf("  idx=%lu flag=0x%02X\r\n",
+                   (unsigned long)abnormal_idx[k], abnormal_flags[k]);
+        }
+    }
+    //min_seq_index未被赋值，没有找到任何有效数据，说明Flash是空的，读写指针都指向第一个空位
+    if (min_seq_index == 0xFFFFFFFF)
+    {
+        flash_read_index  = (first_empty == 0xFFFFFFFF) ? 0 : first_empty;
+        flash_write_index = flash_read_index;
+        g_flash_seq       = 0;
+        printf("DEBUG flash_store_rescan: EMPTY (first_empty=%lu)\r\n", first_empty);
+    }
+    else
+    {
+        // 读指针 = seq 最小的A6记录所在位置（该位置必定是 A6）
+        flash_read_index  = min_seq_index;
+        // 写指针 = seq 最大的A6里记录的下一个位置（该位置必定是 FF 或 00）
+        flash_write_index = (max_seq_index + 1U) % FLASH_RECORD_COUNT;
+        g_flash_seq       = max_seq + 1;
+        printf("DEBUG flash_store_rescan: min_seq=%lu(idx=%lu) max_seq=%lu empty=%lu valid=%lu\r\n",
+               min_seq, min_seq_index, max_seq, first_empty, valid_count);
+    }
+}
+
+/* ====================================================================
+ * 格式化：擦除全部数据区（对外导出，供按键等外部触发）
+ * ==================================================================== */
+void flash_store_format_all(void)
+{
+    if (!flash_ready) return;
+    printf("DEBUG: Formatting Flash (erasing all sectors)...\r\n");
+
+    // uint32_t base_sector = FLASH_DATA_START / FLASH_SECTOR_SIZE;
+    // for (uint32_t sector = 0; sector < (FLASH_DATA_SIZE / FLASH_SECTOR_SIZE); sector++)
+    // {
+    //     W25QXX_Erase_Sector(base_sector + sector);
+        
+    //     if ((sector + 1) % 64 == 0)
+    //         printf("  Erased %lu sectors...\r\n", sector + 1);
+    // }
+    taskENTER_CRITICAL(); // 进入临界区，防止中断打断擦除操作
+    W25QXX_Erase_Chip();   // 擦除整片 Flash
+    taskEXIT_CRITICAL();  // 退出临界区   
+
+    printf("DEBUG: Flash format complete!\r\n");
+
+    // 擦除后抽查：读数据区前 8 条记录的 flag，确认是否真的全擦成 0xFF
+    // （0xFF=擦除干净；出现 0xA5 等其它值 = 擦除没生效）
+    uint8_t chk[8];
+    W25QXX_Read(chk, FLASH_DATA_START, 8);
+    printf("[format] post-check flags(0x200000): %02X %02X %02X %02X %02X %02X %02X %02X\r\n",
+           chk[0], chk[1], chk[2], chk[3], chk[4], chk[5], chk[6], chk[7]);
+    // 再抽查数据区末尾（最后一个扇区首地址），确认整个 1MB 都擦了
+    uint32_t last_sector_addr = FLASH_DATA_START + FLASH_DATA_SIZE - FLASH_SECTOR_SIZE;
+    W25QXX_Read(chk, last_sector_addr, 8);
+    printf("[format] post-check flags(0x%lX): %02X %02X %02X %02X %02X %02X %02X %02X\r\n",
+           (unsigned long)last_sector_addr,
+           chk[0], chk[1], chk[2], chk[3], chk[4], chk[5], chk[6], chk[7]);
+
+    flash_read_index  = 0;
+    flash_write_index = 0;
+    flash_valid_count = 0;
+    g_flash_seq       = 0;
+}
+
+/* ====================================================================
+ * 初始化：校验 Flash 健康度，扫描恢复索引
+ * ==================================================================== */
+ void flash_store_init(void)
+{
+    if (!flash_ready)
+    {
+        flash_read_index  = 0;
+        flash_write_index = 0;
+        flash_valid_count = 0;
+        return;
+    }
+
+  volatile  uint8_t first_flag = 0XAA;
+    W25QXX_Read(&first_flag, FLASH_DATA_START, 1);
+
+    if (first_flag != FLASH_FLAG_EMPTY &&
+        first_flag != FLASH_FLAG_VALID &&
+        first_flag != FLASH_FLAG_SENT)
+    {
+        printf("DEBUG: Flash appears corrupted (first_flag=0x%02X), formatting...\r\n", first_flag);
+        flash_store_format_all();
+        return;
+    }
+
+    flash_store_rescan();
+    printf("Flash Init Done: read_idx=%lu write_idx=%lu valid_count=%lu\r\n",
+           flash_read_index, flash_write_index, flash_valid_count);
+}
+
+/* ====================================================================
+ * 核心操作：存一条离线数据到 Flash（仅由 flash_writer_task 调用）
+ * ==================================================================== */
 static void flash_store_push(const char *data, uint16_t len)
 {
     if (!flash_ready) return;
-    
-    uint8_t flag = 0;
-    uint32_t addr = 0;
+
+    uint8_t  flag      = 0;
+    uint32_t addr      = 0;
     uint32_t empty_idx = 0xFFFFFFFF;
-    
-    // 从当前预期要写的位置开始，往后找是否有现成的空位或废弃位可以覆写
+
+    // 从 write_index 出发找第一个可用空位
     for (uint32_t i = 0; i < FLASH_RECORD_COUNT; i++)
     {
         uint32_t idx = (flash_write_index + i) % FLASH_RECORD_COUNT;
@@ -169,171 +212,263 @@ static void flash_store_push(const char *data, uint16_t len)
         if (flag == FLASH_FLAG_EMPTY || flag == FLASH_FLAG_SENT)
         {
             empty_idx = idx;
-            break;  // 找到能写的空位了，停止查找
+            break;
         }
     }
 
     if (empty_idx != 0xFFFFFFFF)
     {
-        // 若有现成的空位，就选它 
         flash_write_index = empty_idx;
     }
     else
     {
-        // 【最极端情况】写满了，没有空位或废弃位 -> 需要覆写最旧的区，进行强行擦除
-        // 算出当前写游标所在的宏观 4KB 扇区头和尾包含哪些消息条数区间
-        uint32_t sector_start = (flash_write_index / FLASH_RECORDS_PER_SECTOR) * FLASH_RECORDS_PER_SECTOR;
-        uint32_t sector_end = sector_start + FLASH_RECORDS_PER_SECTOR;
+        // 缓冲区满 → 擦除最旧数据所在扇区 (read_index)，保证 FIFO
+        uint32_t sector_start = (flash_read_index / FLASH_RECORDS_PER_SECTOR) * FLASH_RECORDS_PER_SECTOR;
+        uint32_t sector_end   = sector_start + FLASH_RECORDS_PER_SECTOR;
 
-        // 直接抹除这个扇区，腾出整个 Sector 大小的空位
-        flash_store_erase_sector(flash_write_index);
-
-        // 如果强制擦除的扇区里面碰巧包含了当前还没来得及上传的“第一条数据”(读游标正停在这)
-        // 那读游标就乱了，所以触发一次全局重新找寻恢复读游标
-        if (flash_read_index >= sector_start && flash_read_index < sector_end)
+        // 统计被擦除的有效记录数
+        uint32_t lost = 0;
+        for (uint32_t i = sector_start; i < sector_end; i++)
         {
-            flash_store_rescan();
+            uint8_t f;
+            W25QXX_Read(&f, flash_record_addr(i), 1);
+            if (f == FLASH_FLAG_VALID) lost++;
         }
-        flash_write_index = sector_start; // 更新写指针为刚刚擦除出来的位置第一条
+
+        flash_store_erase_sector(flash_read_index);
+
+        if (flash_valid_count >= lost)
+            flash_valid_count -= lost;
+        else
+            flash_valid_count = 0;
+
+        // read_index 跳到擦除扇区之后第一个有效记录
+        flash_read_index = sector_end % FLASH_RECORD_COUNT;
+        if (flash_valid_count > 0)
+        {
+            uint32_t start = flash_read_index;
+            uint8_t  f;
+            for (;;)
+            {
+                W25QXX_Read(&f, flash_record_addr(flash_read_index), 1);
+                if (f == FLASH_FLAG_VALID) break;
+                flash_read_index = (flash_read_index + 1) % FLASH_RECORD_COUNT;
+                if (flash_read_index == start) break;
+            }
+        }
+
+        flash_write_index = sector_start;
     }
 
     addr = flash_record_addr(flash_write_index);
-    // 强制截断保护，禁止越界写垮页
-    if (len > sizeof(((FlashRecord *)0)->data)) len = sizeof(((FlashRecord *)0)->data);
-    
-    // 拼装 256 字节的完整写入帧
+
+    // 强制截断保护
+    if (len > sizeof(((FlashRecord *)0)->data))
+        len = sizeof(((FlashRecord *)0)->data);
+
+    // 拼装 256 字节帧: [flag:1B][seq:4B][len:2B][data:249B]
     uint8_t buf[FLASH_RECORD_SIZE];
-    memset(buf, 0xFF, sizeof(buf));  // 未使用的部分保持 0xFF 可以减少 Flash 损耗
-    buf[0] = FLASH_FLAG_VALID;       // 数据标记位 (0xA5)
-    buf[1] = (uint8_t)(len & 0xFF);         // 长度的低 8 位
-    buf[2] = (uint8_t)((len >> 8) & 0xFF);  // 长度的高 8 位
-    memcpy(&buf[3], data, len);             // JSON 有效荷载
-    
-    W25QXX_Write(buf, addr, FLASH_RECORD_SIZE); // 按页一次性烧录写入到 Flash 闪存芯片
-    
-    // 写完本条后让指针往后推一格，遇到尾部就折返 0(环形队列逻辑)
+    memset(buf, 0xFF, sizeof(buf));
+    buf[0] = FLASH_FLAG_VALID;
+    buf[1] = (uint8_t)(g_flash_seq & 0xFF);
+    buf[2] = (uint8_t)((g_flash_seq >> 8) & 0xFF);
+    buf[3] = (uint8_t)((g_flash_seq >> 16) & 0xFF);
+    buf[4] = (uint8_t)((g_flash_seq >> 24) & 0xFF);
+    buf[5] = (uint8_t)(len & 0xFF);
+    buf[6] = (uint8_t)((len >> 8) & 0xFF);
+    memcpy(&buf[7], data, len);
+    g_flash_seq++;
+
+    W25QXX_Write(buf, addr, FLASH_RECORD_SIZE);
+
     flash_write_index = (flash_write_index + 1) % FLASH_RECORD_COUNT;
-    // 总有效数增加(封顶不超过总容量上限)
     if (flash_valid_count < FLASH_RECORD_COUNT) flash_valid_count++;
 }
 
-/**
- * @brief       预览并拷贝出当前存放的最老的一起数据 (供断网重连后上报处理)
- * @attention   该函数属于 peek 行为，仅供读取。只有发送真的成功后才会将其标记抹杀
- * @retval      返回 1 读出了数据，返回 0 没数据
- */
+/* ====================================================================
+ * 核心操作：读取最旧的有效数据（仅由 flash_writer_task 调用）
+ * ==================================================================== */
 static int flash_store_peek(char *out, uint16_t max_len, uint16_t *out_len, uint32_t *out_index)
 {
-    if (!flash_ready) return 0;
-    if (flash_valid_count == 0) return 0; // 若自认为没有效数据，直接返回
-    
-    uint8_t flag = 0;
+    if (!flash_ready)      return 0;
+    if (flash_valid_count == 0) return 0;
+
+    uint8_t  flag  = 0;
     uint32_t start = flash_read_index;
-    uint32_t idx = flash_read_index;
-    
-    // 顺着当前读游标往下遍历去找第一个含 0xA5 的有效标记块
+    uint32_t idx   = flash_read_index;
+
     for (uint32_t i = 0; i < FLASH_RECORD_COUNT; i++)
     {
         uint32_t addr = flash_record_addr(idx);
         W25QXX_Read(&flag, addr, 1);
-        
+
         if (flag == FLASH_FLAG_VALID)
         {
-            // 抓到有效节点，提取出长度标志位
+            // 布局: [flag:1B][seq:4B][len:2B][data:...]
             uint8_t len_bytes[2];
-            W25QXX_Read(len_bytes, addr + 1, 2);
+            W25QXX_Read(len_bytes, addr + 5, 2);
             uint16_t len = (uint16_t)(len_bytes[0] | (len_bytes[1] << 8));
-            
-            // 安全限制避免数组撑爆
+
             if (len >= max_len) len = max_len - 1;
-            
-            // 掏出有效报文荷载
-            W25QXX_Read((uint8_t *)out, addr + 3, len);
-            out[len] = '\0'; // 强行补充字符末尾结尾符\0保证 printf 不乱跑
-            
-            *out_len = len;   // 传出长度
-            *out_index = idx; // 传出该条数据所在游标
+
+            W25QXX_Read((uint8_t *)out, addr + 7, len);
+            out[len] = '\0';
+
+            *out_len   = len;
+            *out_index = idx;
             return 1;
         }
-        
-        idx = (idx + 1) % FLASH_RECORD_COUNT; // 找不到往下个格推进寻找
-        if (idx == start)
-        {
-            break; // 绕了一圈回来了还是没有有效，说明 Flash 实际上空了
-        }
+
+        idx = (idx + 1) % FLASH_RECORD_COUNT;
+        if (idx == start) break;
     }
-    
-    // 到了这里说明预期有 valid_count 但实际上找不到数据，缓存状态彻底不一致了，执行一次重扫
+
     flash_store_rescan();
     return 0;
 }
 
-/**
- * @brief       将指定游标位置的离线历史数据手动打上 “不可用的已发送(0x00)” 作废下架标签
- *              （将 FLASH_FLAG_VALID 改为 FLASH_FLAG_SENT）
- *              不需要执行耗时的页/扇区擦除操作。直接覆写 0x00 下去即可。
- */
+/* ====================================================================
+ * 核心操作：标记一条记录为已发送（仅由 flash_writer_task 调用）
+ * ==================================================================== */
 static void flash_store_mark_sent(uint32_t index)
 {
     if (!flash_ready) return;
-    
+
     uint8_t sent_flag = FLASH_FLAG_SENT;
-    // 只需要将头部的 1 字节 0xA5 变成 0x00，在不擦除的情况下 Flash 允许将 1 写为 0
     W25QXX_Write(&sent_flag, flash_record_addr(index), 1);
-    
-    // 成功上报剔除，有效数据减 1
+
     if (flash_valid_count > 0) flash_valid_count--;
-    
-    // 读游标顺理成章移到这一个逻辑的下一格去准备下一次 peek
     flash_read_index = (index + 1) % FLASH_RECORD_COUNT;
 }
 
-// ======================= 下面暴露给其它业务逻辑多任务使用的 互斥上锁版本 =======================
+/* ====================================================================
+ * 对外异步 API：发送请求到队列，立即返回
+ * ==================================================================== */
 
-/**
- * @brief       多线程写保护的 push 入列函数 (存新数据)
- */
-void flash_store_push_locked(const char *data, uint16_t len)
+int flash_store_push_async(const char *data, uint16_t len)
 {
-    if (xFlashMutex && xSemaphoreTake(xFlashMutex, pdMS_TO_TICKS(200)) == pdTRUE)
+    if (xFlashReqQueue == NULL) return 0;
+
+    FlashRequest req;
+    memset(&req, 0, sizeof(req));
+    req.type = FLASH_REQ_PUSH;
+    if (len > FLASH_REQ_DATA_MAX) len = FLASH_REQ_DATA_MAX;
+    memcpy(req.push.data, data, len);
+    req.push.len = len;
+
+    if (xQueueSend(xFlashReqQueue, &req, 0) != pdTRUE)
     {
-        flash_store_push(data, len);
-        xSemaphoreGive(xFlashMutex);
+        // 队列满 → 数据无法入队，稍后重试
+        return 0;
     }
-    else
-    {
-        // 如果实在拿不到锁或者锁还没创建也硬存一次试试
-        flash_store_push(data, len);
-    }
+    return 1;
 }
 
-/**
- * @brief       多线程写保护的 peek 取出函数 (准备读去传)
- */
-int flash_store_peek_locked(char *out, uint16_t max_len, uint16_t *out_len, uint32_t *out_index)
+int flash_store_peek_async(char *out, uint16_t max_len, uint16_t *out_len, uint32_t *out_index)
 {
-    int ret = 0;
-    if (xFlashMutex && xSemaphoreTake(xFlashMutex, pdMS_TO_TICKS(200)) == pdTRUE)
+    if (xFlashReqQueue == NULL) return 0;
+
+    FlashRequest req;
+    memset(&req, 0, sizeof(req));
+    req.type           = FLASH_REQ_PEEK;
+    req.peek.out       = out;
+    req.peek.max_len   = max_len;
+    req.peek.out_len   = out_len;
+    req.peek.out_index = out_index;
+    req.peek.ret       = NULL;  // 由 flash_writer_task 写入
+
+    int ret_val = 0;
+    req.peek.ret = &ret_val;
+
+    // 记录当前任务句柄，供 flash_writer_task 唤醒
+    g_peek_caller = xTaskGetCurrentTaskHandle();
+
+    // 发送请求（阻塞等待队列有空位）
+    if (xQueueSend(xFlashReqQueue, &req, portMAX_DELAY) != pdTRUE)
     {
-        ret = flash_store_peek(out, max_len, out_len, out_index);
-        xSemaphoreGive(xFlashMutex);
-        return ret;
+        return 0;
     }
-    return flash_store_peek(out, max_len, out_len, out_index);
+
+    // 阻塞等待 flash_writer_task 处理完毕并通过 TaskNotify 唤醒
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    return ret_val;
 }
 
-/**
- * @brief       多线程写保护的 mark sent 函数 (用完剔除了)
- */
-void flash_store_mark_sent_locked(uint32_t index)
+void flash_store_mark_sent_async(uint32_t index)
 {
-    if (xFlashMutex && xSemaphoreTake(xFlashMutex, pdMS_TO_TICKS(200)) == pdTRUE)
+    if (xFlashReqQueue == NULL) return;
+
+    FlashRequest req;
+    memset(&req, 0, sizeof(req));
+    req.type            = FLASH_REQ_MARK_SENT;
+    req.mark_sent.index = index;
+
+    xQueueSend(xFlashReqQueue, &req, 0);
+}
+
+void flash_store_format_async(void)
+{
+    if (xFlashReqQueue == NULL) return;
+
+    FlashRequest req;
+    memset(&req, 0, sizeof(req));
+    req.type = FLASH_REQ_FORMAT;
+
+    xQueueSend(xFlashReqQueue, &req, 0);
+}
+
+/* ====================================================================
+ * Flash 写任务：唯一直接操作 SPI Flash 的 FreeRTOS 任务
+ * ==================================================================== */
+void flash_writer_task(void *pv)
+{
+    // 启动时先初始化 Flash（扫描恢复）
+    //flash_store_format_all();
+   
+
+    FlashRequest req;
+
+    while (1)
     {
-        flash_store_mark_sent(index);
-        xSemaphoreGive(xFlashMutex);
-    }
-    else
-    {
-        flash_store_mark_sent(index);
+        // 阻塞等待请求
+        if (xQueueReceive(xFlashReqQueue, &req, portMAX_DELAY) != pdTRUE)
+            continue;
+
+        switch (req.type)
+        {
+            case FLASH_REQ_PUSH:
+                flash_store_push(req.push.data, req.push.len);
+                break;
+
+            case FLASH_REQ_PEEK:
+                if (req.peek.ret != NULL)
+                {
+                    *req.peek.ret = flash_store_peek(req.peek.out,
+                                                       req.peek.max_len,
+                                                       req.peek.out_len,
+                                                       req.peek.out_index);
+                }
+                // 唤醒等待的调用者
+                if (g_peek_caller != NULL)
+                {
+                    xTaskNotifyGive(g_peek_caller);
+                    g_peek_caller = NULL;
+                }
+                break;
+
+            case FLASH_REQ_MARK_SENT:
+                flash_store_mark_sent(req.mark_sent.index);
+                break;
+
+            case FLASH_REQ_FORMAT:
+                flash_store_format_all();
+               // delay_sms(100); // 等待擦除完成
+                break;
+
+            default:
+                break;
+        }
+       // vTaskDelay(pdMS_TO_TICKS(100)); // 避免任务饥饿，给其他任务机会
     }
 }

@@ -44,6 +44,7 @@
 #define NET_TASK_PRIO 4
 #define RUN_TIME_STATS_TASK_PRIO 2
 #define DATA_PROCESS_TASK_PRIO 4  // 数据处理任务优先级
+#define FLASH_WRITER_TASK_PRIO 2
 #define WATCHDOG_TASK_PRIO 6
 
 // 任务堆栈大小定义
@@ -56,6 +57,7 @@
 #define RUN_TIME_STATS_STK_SIZE 256
 #define DATA_PROCESS_STK_SIZE 256 // 数据处理任务堆栈大小
 #define WATCHDOG_STK_SIZE 128
+#define FLASH_WRITER_STK_SIZE 256
 
 // 任务句柄
 TaskHandle_t StartTask_Handler;
@@ -67,6 +69,7 @@ TaskHandle_t NETTask_Handler;
 TaskHandle_t RunTimeStatsTask_Handler;
 //TaskHandle_t DataProcessTask_Handler; // 数据处理任务句柄
 TaskHandle_t WatchdogTask_Handler;
+TaskHandle_t FlashWriterTask_Handler;
 
 // 任务函数声明
 void start_task(void *pv);
@@ -82,7 +85,6 @@ void watchdog_task(void *pv);
 
 QueueHandle_t xUartRxQueue; // UART 接收队列
 SemaphoreHandle_t xLCDMutex;
-SemaphoreHandle_t xFlashMutex;
 
 TIM_HandleTypeDef htim2;
 
@@ -141,6 +143,14 @@ int main(void)
 	
 	printf("reset  v5.7\r\n");
 
+    W25QXX_Init();
+    uint16_t flash_id = W25QXX_ReadID();
+    printf("W25Q ID: 0x%04X\r\n", flash_id);
+    if (flash_id == W25Q256 || flash_id == W25Q128 || flash_id == W25Q64)
+    {
+        flash_ready = 1; // 标记 Flash 硬件可用，flash_writer_task 初始化时会用到
+    }
+     flash_store_init();//不能在FreeRTOS任务中，不然读取的第一个字节会被RTOS的堆覆盖成A5，导致flash_store_rescan()判断错误
     // 创建启动任务并启动调度器
     xTaskCreate(start_task,"start_task",START_STK_SIZE,NULL,START_TASK_PRIO,&StartTask_Handler);
     vTaskStartScheduler();  
@@ -158,7 +168,7 @@ void start_task(void *pv)
     xAP3216CQueueForMQTT = xQueueCreate(5, sizeof(AP3216C_Data_t)); // 专用于 MQTT 上报的队列
     xUartRxQueue = xQueueCreate(10, sizeof(uint16_t)); // UART 数据接收队列
     xLCDMutex = xSemaphoreCreateMutex();
-    xFlashMutex = xSemaphoreCreateMutex();
+    xFlashReqQueue = xQueueCreate(FLASH_REQ_QUEUE_LEN, sizeof(FlashRequest)); // Flash 写任务请求队列
 
     cJSON_Hooks hooks;
     hooks.malloc_fn = pvPortMalloc;
@@ -166,20 +176,21 @@ void start_task(void *pv)
     cJSON_InitHooks(&hooks);
 
     // 检查队列及互斥锁是否成功创建
-    if (xDHT11Queue == NULL || xAP3216CQueue == NULL || xLCDMutex == NULL || xUartRxQueue == NULL || xFlashMutex == NULL) {
+    if (xDHT11Queue == NULL || xAP3216CQueue == NULL || xLCDMutex == NULL ||
+        xUartRxQueue == NULL || xFlashReqQueue == NULL) {
         printf("队列/互斥锁创建失败\r\n");
-        // 实际使用时这里可以考虑增加错误处理或死循环报警
     }
 
     // 创建系统的核心工作任务
     xTaskCreate(init_task,   "init_task",   INIT_STK_SIZE, NULL, INIT_TASK_PRIO, &InitTask_Handler);
+    xTaskCreate(flash_writer_task, "flash_wr", FLASH_WRITER_STK_SIZE, NULL, FLASH_WRITER_TASK_PRIO, &FlashWriterTask_Handler);
     xTaskCreate(dht11_task,  "dht11_task",  DHT11_STK_SIZE, NULL, DHT11_TASK_PRIO, &DHT11Task_Handler);
     xTaskCreate(ap3216c_task,"ap3216c_task",AP3216C_STK_SIZE, NULL, AP3216C_TASK_PRIO, &AP3216CTask_Handler);
     xTaskCreate(lcd_task,    "lcd_task",    LCD_STK_SIZE, NULL, LCD_TASK_PRIO, &LCDTask_Handler);
     xTaskCreate(net_task,    "net_task",    NET_STK_SIZE, NULL, NET_TASK_PRIO, &NETTask_Handler);
     //xTaskCreate(run_time_stats_task, "stats_task", RUN_TIME_STATS_STK_SIZE, NULL, RUN_TIME_STATS_TASK_PRIO, &RunTimeStatsTask_Handler);
-    xTaskCreate(watchdog_task, "watchdog", WATCHDOG_STK_SIZE, NULL, WATCHDOG_TASK_PRIO, &WatchdogTask_Handler);
-   
+   // xTaskCreate(watchdog_task, "watchdog", WATCHDOG_STK_SIZE, NULL, WATCHDOG_TASK_PRIO, &WatchdogTask_Handler);
+
 
     // 启动任务创建完其他任务后，删除自身释放资源
     vTaskDelete(NULL);
@@ -194,15 +205,6 @@ void init_task(void *pv)
     LCD_Init();                     // LCD 屏幕初始化
     PCF8574_Init();                 // PCF8574 扩展 IO 芯片初始化
 
-    W25QXX_Init();
-    uint16_t flash_id = W25QXX_ReadID();
-    printf("W25Q ID: 0x%04X\r\n", flash_id);
-    if (flash_id == W25Q256 || flash_id == W25Q128 || flash_id == W25Q64)
-    {
-        // 强制不使能Flash，防止过度读写
-         flash_ready = 1; 
-    }
-     flash_store_init(); // 注释掉Flash的初始化扫描
 
     // 获取 PCF8574 扩展IO 状态以初始化 DHT11 相关引脚
     PCF8574_ReadBit(BEEP_IO);

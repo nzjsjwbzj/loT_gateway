@@ -5,6 +5,8 @@
 #include "task.h"
 #include "queue.h"
 #include "semphr.h"
+#include "ap3216c.h"
+#include "dht11.h"
 
 #define AP_SAMPLE_PERIOD_MIN_MS 200
 #define AP_SAMPLE_PERIOD_MAX_MS 60000
@@ -31,7 +33,6 @@ extern QueueHandle_t xDHT11Queue;
 extern QueueHandle_t xAP3216CQueue;
 extern QueueHandle_t xAP3216CQueueForMQTT; // MQTT专用发送队列
 
-extern volatile uint8_t g_mqtt_connected;
 extern volatile uint32_t g_ap_sample_period_ms;
 
 #endif

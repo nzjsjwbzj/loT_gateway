@@ -80,7 +80,8 @@
 ..\obj\store_flash.o: ..\FreeRTOS\include\deprecated_definitions.h
 ..\obj\store_flash.o: ..\FreeRTOS\portable\RVDS\ARM_CM4F\portmacro.h
 ..\obj\store_flash.o: ..\FreeRTOS\include\mpu_wrappers.h
-..\obj\store_flash.o: ..\FreeRTOS\include\semphr.h
+..\obj\store_flash.o: ..\FreeRTOS\include\task.h
+..\obj\store_flash.o: ..\FreeRTOS\include\list.h
 ..\obj\store_flash.o: ..\FreeRTOS\include\queue.h
 ..\obj\store_flash.o: ..\HARDWARE\W25QXX\w25qxx.h
 ..\obj\store_flash.o: E:\solftwares\keil_v5\ARM\ARMCC\Bin\..\include\string.h

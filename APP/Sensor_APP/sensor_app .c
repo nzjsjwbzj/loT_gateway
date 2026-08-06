@@ -1,6 +1,6 @@
 #include "sensor_app.h"
 #include "wdog.h"
-
+#include "store_flash.h"
 // 队列及信号量句柄
 QueueHandle_t xDHT11Queue;
 QueueHandle_t xAP3216CQueue;
@@ -52,14 +52,14 @@ void ap3216c_task(void *pv)
         
         // 传递给 MQTT 网络上报任务
         BaseType_t qret = xQueueSend(xAP3216CQueueForMQTT, &ap3216c_data, 0);
-        if (!g_mqtt_connected || qret != pdTRUE)
+        if ( qret != pdTRUE)//联网了但是队列满了，存flash. 没联网的话走网络里面的另一条路
         {
             int n = snprintf(json_buf, sizeof(json_buf), "{\"als\":%u,\"ir\":%u,\"ps\":%u}",
                              ap3216c_data.als, ap3216c_data.ir, ap3216c_data.ps);
             if (n > 0 && n < (int)sizeof(json_buf))
             {
                 // 注释掉该行，停止Flash写入
-                 flash_store_push_locked(json_buf, (uint16_t)n);
+                 flash_store_push_async(json_buf, (uint16_t)n);
             }
         }
 

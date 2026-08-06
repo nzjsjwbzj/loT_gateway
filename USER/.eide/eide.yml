@@ -1,5 +1,5 @@
 version: "4.1"
-name: DHT11
+name: gateway
 type: ARM
 deviceName: null
 packDir: null
@@ -46,6 +46,10 @@ virtualFolder:
         - path: ../HALLIB/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_dma2d.c
         - path: ../HALLIB/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_spi.c
         - path: ../HALLIB/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_can.c
+        - path: ../HALLIB/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_iwdg.c
+        - path: ../HALLIB/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_wwdg.c
+        - path: ../HALLIB/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_flash_ex.c
+        - path: ../HALLIB/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_flash.c
       folders: []
     - name: SYSTEM
       files:
@@ -64,6 +68,8 @@ virtualFolder:
         - path: ../HARDWARE/PCF8574/pcf8574.c
         - path: ../HARDWARE/DHT11/dht11.c
         - path: ../HARDWARE/AP3216C/ap3216c.c
+        - path: ../HARDWARE/W25QXX/w25qxx.c
+        - path: ../HARDWARE/SPI/spi.c
       folders: []
     - name: README
       files:
@@ -87,6 +93,41 @@ virtualFolder:
       files:
         - path: ../ATK_MW8266D/atk_mw8266d.c
         - path: ../ATK_MW8266D/atk_mw8266d_uart.c
+      folders: []
+    - name: CJSON
+      files:
+        - path: ../cJSON/Src/cJSON.c
+      folders: []
+    - name: MQTT
+      files:
+        - path: ../MQTT/MQTTConnectClient.c
+        - path: ../MQTT/MQTTConnectServer.c
+        - path: ../MQTT/MQTTDeserializePublish.c
+        - path: ../MQTT/MQTTFormat.c
+        - path: ../MQTT/MQTTPacket.c
+        - path: ../MQTT/MQTTSerializePublish.c
+        - path: ../MQTT/MQTTSubscribeClient.c
+        - path: ../MQTT/MQTTSubscribeServer.c
+        - path: ../MQTT/MQTTUnsubscribeClient.c
+        - path: ../MQTT/MQTTUnsubscribeServer.c
+        - path: ../MQTT/transport.c
+      folders: []
+    - name: OTA
+      files:
+        - path: ../HARDWARE/FLASH/flash.c
+        - path: ../OTA/ota.c
+        - path: ../MD5/md5.c
+      folders: []
+    - name: APP
+      files:
+        - path: ../APP/NET_APP/network_app .c
+        - path: ../APP/SPI_FLASH_APP/store_flash.c
+        - path: ../APP/WDOG_APP/wdog.c
+        - path: ../APP/Sensor_APP/sensor_app .c
+      folders: []
+    - name: protocol
+      files:
+        - path: ../PROTOCOL/protocol_onenet.c
       folders: []
 dependenceList: []
 outDir: build
@@ -125,6 +166,8 @@ targets:
         - RTE/_DHT11
       libList: []
     excludeList: []
+    settings:
+      debugger: cortex-debug
     toolchain: AC5
     toolchainConfigMap:
       AC5:
@@ -219,6 +262,163 @@ targets:
               mem:
                 size: "0x100000"
                 startAddr: "0x8000000"
+              tag: IROM
+            - id: 2
+              isChecked: false
+              isStartup: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              tag: IROM
+        useCustomScatterFile: false
+    uploadConfigMap:
+      JLink:
+        baseAddr: ""
+        bin: ""
+        cpuInfo:
+          cpuName: "null"
+          vendor: "null"
+        otherCmds: ""
+        proType: 1
+        speed: 8000
+    uploader: JLink
+  gateway:
+    cppPreprocessAttrs:
+      defineList:
+        - USE_HAL_DRIVER
+        - STM32F429xx
+      incList:
+        - ../CORE
+        - ../OBJ
+        - .
+        - ../HALLIB/STM32F4xx_HAL_Driver/Inc
+        - ../SYSTEM/delay
+        - ../SYSTEM/sys
+        - ../SYSTEM/usart
+        - ../HARDWARE/LED
+        - ../HARDWARE/KEY
+        - ../HARDWARE/LCD
+        - ../HARDWARE/SDRAM
+        - ../HARDWARE/IIC
+        - ../HARDWARE/PCF8574
+        - ../HARDWARE/DHT11
+        - ../HARDWARE/AP3216C
+        - ../FreeRTOS/include
+        - ../FreeRTOS/portable/MemMang
+        - ../FreeRTOS/portable/RVDS/ARM_CM4F
+        - ../ATK_MW8266D
+        - ../cJSON/Inc
+        - ../MQTT
+        - ../HARDWARE/SPI
+        - ../HARDWARE/W25QXX
+        - ../MD5
+        - ../OTA
+        - ../HARDWARE/FLASH
+        - ../PROTOCOL
+        - ../APP/NET_APP
+        - ../APP/SPI_FLASH_APP
+        - ../APP/WDOG_APP
+        - ../APP/Sensor_APP
+        - .cmsis/include
+        - RTE/_gateway
+      libList: []
+    excludeList: []
+    settings: {}
+    toolchain: AC5
+    toolchainConfigMap:
+      AC5:
+        archExtensions: ""
+        cpuType: Cortex-M4
+        floatingPointHardware: single
+        options:
+          version: 4
+          afterBuildTasks: []
+          asm-compiler:
+            defines: []
+          beforeBuildTasks: []
+          c/cpp-compiler:
+            CXX_FLAGS: --diag_suppress=1 --diag_suppress=1295
+            C_FLAGS: --diag_suppress=1 --diag_suppress=1295
+            c99-mode: true
+            one-elf-section-per-function: true
+            optimization: level-2
+            warnings: all-warnings
+          global:
+            output-debug-info: enable
+            use-microLIB: true
+          linker:
+            $outputTaskExcludes:
+              - .bin
+            output-format: elf
+            ro-base: "0x08000000"
+            rw-base: "0x20000000"
+            xo-base: ""
+        scatterFilePath: ""
+        storageLayout:
+          RAM:
+            - id: 1
+              isChecked: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              noInit: false
+              tag: RAM
+            - id: 2
+              isChecked: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              noInit: false
+              tag: RAM
+            - id: 3
+              isChecked: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              noInit: false
+              tag: RAM
+            - id: 1
+              isChecked: true
+              mem:
+                size: "0x30000"
+                startAddr: "0x20000000"
+              noInit: false
+              tag: IRAM
+            - id: 2
+              isChecked: false
+              mem:
+                size: "0x10000"
+                startAddr: "0x10000000"
+              noInit: false
+              tag: IRAM
+          ROM:
+            - id: 1
+              isChecked: false
+              isStartup: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              tag: ROM
+            - id: 2
+              isChecked: false
+              isStartup: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              tag: ROM
+            - id: 3
+              isChecked: false
+              isStartup: false
+              mem:
+                size: "0x0"
+                startAddr: "0x0"
+              tag: ROM
+            - id: 1
+              isChecked: true
+              isStartup: true
+              mem:
+                size: "0x80000"
+                startAddr: "0x8020000"
               tag: IROM
             - id: 2
               isChecked: false

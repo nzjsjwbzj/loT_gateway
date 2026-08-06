@@ -31,17 +31,20 @@
 #define MQTT_BROKER_PORT        "1883"
 #define MQTT_CLIENT_ID          "d0"//设备名称
 #define MQTT_USER_NAME          "XHm5ltr9qA"//产品ID
-#define MQTT_PASSWORD           "version=2018-10-31&res=products%2FXHm5ltr9qA%2Fdevices%2Fd0&et=2089352870&method=sha1&sign=g0Ci5BoZ25In%2FlxnVt8zRF9IyLg%3D"
+#define MQTT_PASSWORD           "version=2018-10-31&res=products%2FXHm5ltr9qA%2Fdevices%2Fd0&et=2089352870&method=md5&sign=ZHWb%2F2TNh0C2aS8nBxenrQ%3D%3D"
 #define MQTT_TOPIC_PUB          "$sys/XHm5ltr9qA/d0/thing/property/post"
 #define MQTT_TOPIC_SUB          "$sys/XHm5ltr9qA/d0/thing/property/set"
 
 
-// 将需要用到的全局变量通过 extern 声明出来，以便网络任务能拿到其他文件的资源
+// 需要用的跨文件队列（定义在 main.c，由本文件使用）
 extern QueueHandle_t xAP3216CQueueForMQTT;
 extern QueueHandle_t xUartRxQueue;
-extern volatile uint8_t g_mqtt_connected;
-extern bool con_status;
-extern char ip_buf[16];
+
+/**
+ * @brief  查询当前 MQTT 是否已连接（对外只暴露这一条状态接口）
+ * @retval 1=已连接  0=未连接
+ */
+uint8_t net_is_connected(void);
 
 
 

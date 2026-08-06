@@ -776,7 +776,7 @@ static int ota_check_upgrade(OtaPackageInfo *info)
         // 报文结构里含有我们的版本号等核心参数
         // ===================================
         int req_len = snprintf(g_ota_req, sizeof(g_ota_req),
-                               "GET /fuse-ota/%s/%s/check?version=%s HTTP/1.1\r\n"
+                               "GET /fuse-ota/%s/%s/check?type=2&version=%s HTTP/1.1\r\n"
                                "Host: %s\r\n"
                                "Authorization: %s\r\n"
                                "Connection: close\r\n\r\n",
@@ -1092,6 +1092,9 @@ static int ota_download_and_verify(const OtaPackageInfo *info)
         }
         printf("OTA download %lu/%lu\r\n", (unsigned long)offset, (unsigned long)info->size);
     }
+
+
+    //验证
     uint8_t calc[16];
     MD5_CTX ctx;
     MD5Init(&ctx);
